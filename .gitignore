@@ -6,6 +6,10 @@ coverage.html
 # Go test artifacts (t.ArtifactDir, Go 1.26+)
 /testartifacts/
 
+# Loose dashboard JSON for `make preview` only; the resources in generated/
+# already carry the model as readable JSON.
+/.preview/
+
 # Built binaries
 /bin/
 /generate

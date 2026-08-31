@@ -28,8 +28,9 @@ against the engine that runs it and portable to a plain Prometheus.
     make preview    # look at the boards in a local Grafana
     make help       # every target
 
-Go 1.26.7. `kustomize` and `kubeconform` are needed for `make validate`, and
-Docker for `make preview`.
+Go 1.26.7 — `make` pins `GOTOOLCHAIN` to it, so a newer local Go still produces
+the output CI expects. `kustomize` and `kubeconform` are needed for
+`make validate`, and Docker for `make preview`.
 
 ## Adding a dashboard
 

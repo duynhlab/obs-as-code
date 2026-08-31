@@ -17,6 +17,9 @@ import (
 // board that needs more is a board that should be split, and if one genuinely
 // cannot be, GrafanaDashboard.spec.oci keeps the model out of etcd entirely.
 // Failing at 512 KiB leaves room to notice before the hard wall.
+//
+// The budget matters more now that the model is stored uncompressed — see the
+// comment on GzipJSON's replacement below.
 const MaxObjectBytes = 512 * 1024
 
 // grafanaDashboard is the subset of GrafanaDashboard this repo emits.
@@ -34,9 +37,20 @@ type grafanaDashboardSpec struct {
 	// marks it immutable: renaming a board means deleting the resource first.
 	CustomUID string `json:"uid,omitempty"`
 
-	// GzipJSON carries the model. encoding/json renders a []byte as base64,
-	// which is exactly what the CRD asks for.
-	GzipJSON []byte `json:"gzipJson,omitempty"`
+	// JSON carries the model verbatim.
+	//
+	// spec.gzipJson would be smaller, and was used first, but gzip output is not
+	// byte-stable across Go releases: compress/flate produced different bytes
+	// under Go 1.26.7 and 1.27.0 for identical input. Committing a compressed
+	// blob therefore made `make diff` fail whenever a toolchain differed, and
+	// the base64 was unreviewable besides — it needed a second, readable copy
+	// of every model written alongside it.
+	//
+	// Uncompressed, the resource is the reviewable artifact: sigs.k8s.io/yaml
+	// renders it as a block scalar, so a panel change shows up as a panel change
+	// in the diff. JSON marshalling is stable across Go versions in a way a
+	// compressor is not.
+	JSON string `json:"json,omitempty"`
 
 	// FolderRef names a GrafanaFolder resource in the same namespace. Preferred
 	// over the plain `folder` title string because it makes the dependency on a
@@ -91,11 +105,6 @@ func Dashboard(p profile.Profile, in DashboardInput) (Object, error) {
 		return Object{}, fmt.Errorf("render dashboard %q: model is empty", in.UID)
 	}
 
-	gz, err := gzipJSON(in.Model)
-	if err != nil {
-		return Object{}, fmt.Errorf("render dashboard %q: %w", in.UID, err)
-	}
-
 	const kind = "GrafanaDashboard"
 
 	obj := Object{
@@ -109,7 +118,7 @@ func Dashboard(p profile.Profile, in DashboardInput) (Object, error) {
 			Spec: grafanaDashboardSpec{
 				commonSpec: common(p),
 				CustomUID:  in.UID,
-				GzipJSON:   gz,
+				JSON:       string(in.Model),
 				FolderRef:  in.Folder.UID,
 			},
 		},

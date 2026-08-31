@@ -2,10 +2,6 @@ package render_test
 
 import (
 	"bytes"
-	"compress/gzip"
-	"encoding/base64"
-	"io"
-	"math/rand/v2"
 	"strings"
 	"testing"
 
@@ -81,35 +77,31 @@ func TestDashboard(t *testing.T) {
 	if !ok {
 		t.Fatalf("spec is %T, want a map", dig(t, got, "spec"))
 	}
-	for _, forbidden := range []string{"folder", "folderUID", "json", "url", "configMapRef"} {
+	// The CRD treats the content sources and the folder fields as mutually
+	// exclusive; spec.json and spec.folderRef are the two this repo sets.
+	for _, forbidden := range []string{"folder", "folderUID", "gzipJson", "url", "configMapRef", "jsonnet", "grafanaCom", "oci"} {
 		if _, present := spec[forbidden]; present {
-			t.Errorf("spec.%s is set; the CRD treats the content and folder fields as mutually exclusive", forbidden)
+			t.Errorf("spec.%s is set alongside spec.json and spec.folderRef, which the CRD forbids", forbidden)
 		}
 	}
 	if v, want := dig(t, got, "metadata", "annotations", "obs-as-code/owner"), "platform"; v != want {
 		t.Errorf("owner annotation = %v, want %q", v, want)
 	}
 
-	// The model must survive base64 → gunzip byte for byte. If it does not,
-	// Grafana renders a different board than the JSON reviewed in the PR.
-	encoded, ok := dig(t, got, "spec", "gzipJson").(string)
+	// The resource must carry the model verbatim. If it does not, Grafana
+	// renders a different board than the JSON reviewed in the pull request.
+	embedded, ok := dig(t, got, "spec", "json").(string)
 	if !ok {
-		t.Fatalf("spec.gzipJson is %T, want a base64 string", dig(t, got, "spec", "gzipJson"))
+		t.Fatalf("spec.json is %T, want a string", dig(t, got, "spec", "json"))
 	}
-	raw, err := base64.StdEncoding.DecodeString(encoded)
-	if err != nil {
-		t.Fatalf("base64 decode: %v", err)
+	if embedded != string(model) {
+		t.Error("spec.json is not the model that was passed in")
 	}
-	zr, err := gzip.NewReader(bytes.NewReader(raw))
-	if err != nil {
-		t.Fatalf("gzip.NewReader: %v", err)
-	}
-	decompressed, err := io.ReadAll(zr)
-	if err != nil {
-		t.Fatalf("ReadAll: %v", err)
-	}
-	if !bytes.Equal(decompressed, model) {
-		t.Error("spec.gzipJson does not decode back to the model passed in")
+	// gzipJson was used first and abandoned: gzip output is not byte-stable
+	// across Go releases, so a committed compressed blob broke `make diff`
+	// whenever a toolchain differed.
+	if _, present := spec["gzipJson"]; present {
+		t.Error("spec.gzipJson is set; the model is stored uncompressed so the diff stays reviewable")
 	}
 }
 
@@ -163,14 +155,10 @@ func TestDashboardRejectsBadInput(t *testing.T) {
 func TestDashboardEnforcesSizeBudget(t *testing.T) {
 	t.Parallel()
 
-	// Genuinely incompressible payload, so gzip cannot hide the size. A fixed
-	// seed keeps the test reproducible. A board this big must fail the generate
-	// that produced it rather than an apply hours later.
-	huge := make([]byte, 4*render.MaxObjectBytes)
-	rng := rand.New(rand.NewPCG(1, 2))
-	for i := range huge {
-		huge[i] = byte(rng.UintN(256))
-	}
+	// A board this big must fail the generate that produced it rather than an
+	// apply hours later. The model is stored uncompressed, so its size is the
+	// resource's size.
+	huge := []byte(strings.Repeat(`{"panel":"x"},`, render.MaxObjectBytes/8))
 
 	_, err := render.Dashboard(profile.Cluster(), render.DashboardInput{
 		UID:    "too-big",

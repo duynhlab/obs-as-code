@@ -45,6 +45,7 @@ func run(args []string, stdout io.Writer) error {
 	fs.SetOutput(stdout)
 	outDir := fs.String("out", "generated", "directory to write resources into")
 	only := fs.String("profile", "all", `profile to render, or "all"`)
+	modelDir := fs.String("models", "", "also write each dashboard model as a standalone JSON file here, for local inspection; not committed")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -62,7 +63,7 @@ func run(args []string, stdout io.Writer) error {
 			return err
 		}
 
-		v, err := renderProfile(p, *outDir, written, stdout)
+		v, err := renderProfile(p, *outDir, *modelDir, written, stdout)
 		if err != nil {
 			return err
 		}
@@ -104,7 +105,7 @@ func selectProfiles(name string) ([]profile.Profile, error) {
 	return nil, fmt.Errorf("unknown profile %q; known profiles are %s", name, strings.Join(names, ", "))
 }
 
-func renderProfile(p profile.Profile, outDir string, written map[string]bool, stdout io.Writer) ([]check.Violation, error) {
+func renderProfile(p profile.Profile, outDir, modelDir string, written map[string]bool, stdout io.Writer) ([]check.Violation, error) {
 	var violations []check.Violation
 	var resourcePaths []string
 
@@ -141,8 +142,9 @@ func renderProfile(p profile.Profile, outDir string, written map[string]bool, st
 			resourcePaths = append(resourcePaths, path)
 		}
 
-		// The reviewable model, written beside the resource. The resource
-		// carries the same bytes gzipped, which is unreadable in a diff.
+		// The resource embeds the model as readable JSON, so there is nothing to
+		// write twice. A standalone copy is produced only when asked for, since
+		// Grafana's file provisioning (make preview) wants loose JSON files.
 		if d, isDashboard := r.(registry.Dashboard); isDashboard {
 			model, err := d.Model(p)
 			if err != nil {
@@ -150,8 +152,14 @@ func renderProfile(p profile.Profile, outDir string, written map[string]bool, st
 			}
 			violations = append(violations, check.Dashboard(d.UID, model)...)
 
-			if err := writeFile(filepath.Join(outDir, p.Name, "models", d.UID+".json"), model, written, stdout); err != nil {
-				return nil, err
+			if modelDir != "" {
+				path := filepath.Join(modelDir, p.Name, d.UID+".json")
+				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+					return nil, fmt.Errorf("create %s: %w", filepath.Dir(path), err)
+				}
+				if err := os.WriteFile(path, model, 0o644); err != nil {
+					return nil, fmt.Errorf("write %s: %w", path, err)
+				}
 			}
 		}
 	}

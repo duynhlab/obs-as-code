@@ -104,8 +104,17 @@ Copy `internal/dashboards/example/obs-as-code-example.go`. Then:
   translates field by field — the SDK writes `notification_settings` where the
   CRD reads `notificationSettings`, carries `keepFiringFor` in nanoseconds where
   the CRD wants a duration string, and requires a `ruleGroup` the CRD rejects.
-- **gzip is not deterministic by default.** `internal/render/gzip.go` pins the
-  header fields; without that every generate produces a diff.
+- **`make` pins `GOTOOLCHAIN` to the version CI uses.** `toolchain` in `go.mod`
+  is only a floor, so a newer local Go would otherwise produce different output
+  than the runner. Run things through `make`, not bare `go`.
+- **Always `go mod tidy`, never `-mod=mod`.** `client_golang` imports `procfs`
+  from a Linux-only file, so a macOS build never needs it and never records it
+  in `go.sum` — CI then fails on a missing entry. `make tidy-check` and
+  `make build-linux` are the two gates for that.
+- **The model is stored uncompressed in `spec.json`.** `spec.gzipJson` was tried
+  and abandoned: `compress/flate` output differs between Go 1.26.7 and 1.27.0,
+  so a committed compressed blob broke `make diff` whenever a toolchain
+  differed. Uncompressed, the resource is also the reviewable artifact.
 - **The operator runs `watchNamespaces: monitoring`.** A resource in another
   namespace is ignored with no error reported.
 - **Temporal:** `service_error_with_type` is the server error counter.

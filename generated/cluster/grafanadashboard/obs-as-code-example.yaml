@@ -15,9 +15,613 @@ metadata:
 spec:
   allowCrossNamespaceImport: true
   folderRef: obs-as-code-examples
-  gzipJson: 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
   instanceSelector:
     matchLabels:
       dashboards: grafana
+  json: |
+    {
+      "uid": "obs-as-code-example",
+      "title": "Example — Golden Signals",
+      "tags": [
+        "obs-as-code",
+        "example",
+        "golden-signals"
+      ],
+      "timezone": "browser",
+      "editable": true,
+      "graphTooltip": 1,
+      "time": {
+        "from": "now-6h",
+        "to": "now"
+      },
+      "timepicker": {
+        "hidden": false,
+        "refresh_intervals": [
+          "30s",
+          "1m",
+          "5m",
+          "15m",
+          "1h"
+        ]
+      },
+      "fiscalYearStartMonth": 0,
+      "refresh": "1m",
+      "schemaVersion": 42,
+      "panels": [
+        {
+          "type": "row",
+          "collapsed": false,
+          "title": "Golden signals",
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 0
+          },
+          "id": 0,
+          "panels": []
+        },
+        {
+          "type": "timeseries",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${ds}"
+              },
+              "expr": "sum(rate(http_server_request_duration_seconds_count{job=~\"$job\"}[$__rate_interval])) by (http_route)",
+              "instant": false,
+              "legendFormat": "{{http_route}}",
+              "range": true
+            }
+          ],
+          "title": "Request rate",
+          "description": "Requests handled per second, by route.",
+          "transparent": false,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 0,
+            "y": 1
+          },
+          "repeatDirection": "h",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": []
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "min": 0,
+              "custom": {
+                "gradientMode": "none",
+                "lineWidth": 1,
+                "fillOpacity": 8,
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "timeseries",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${ds}"
+              },
+              "expr": "sum(rate(http_server_request_duration_seconds_count{job=~\"$job\",http_response_status_code=~\"5..\"}[$__rate_interval])) by (http_route)",
+              "instant": false,
+              "legendFormat": "{{http_route}}",
+              "range": true
+            }
+          ],
+          "title": "Error rate",
+          "description": "Requests answered with a 5xx, per second. 4xx is the caller's problem and is deliberately absent.",
+          "transparent": false,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 8,
+            "y": 1
+          },
+          "repeatDirection": "h",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": []
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "min": 0,
+              "custom": {
+                "gradientMode": "none",
+                "lineWidth": 1,
+                "fillOpacity": 8,
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "timeseries",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${ds}"
+              },
+              "expr": "histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket{job=~\"$job\"}[$__rate_interval])) by (le, http_route))",
+              "instant": false,
+              "legendFormat": "{{http_route}}",
+              "range": true
+            }
+          ],
+          "title": "Latency p95",
+          "description": "95th percentile request duration. `le` stays in the inner aggregation, or this returns NaN.",
+          "transparent": false,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 16,
+            "y": 1
+          },
+          "repeatDirection": "h",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": []
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "min": 0,
+              "custom": {
+                "gradientMode": "none",
+                "lineWidth": 1,
+                "fillOpacity": 8,
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "row",
+          "collapsed": false,
+          "title": "Availability",
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 9
+          },
+          "id": 0,
+          "panels": []
+        },
+        {
+          "type": "stat",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${ds}"
+              },
+              "expr": "sum(rate(http_server_request_duration_seconds_count{job=~\"$job\",http_response_status_code=~\"5..\"}[$__rate_interval])) / (sum(rate(http_server_request_duration_seconds_count{job=~\"$job\"}[$__rate_interval])) \u003e 0)",
+              "instant": false,
+              "legendFormat": "",
+              "range": true
+            }
+          ],
+          "title": "Error ratio",
+          "description": "Fraction of requests failing. The denominator is guarded with `\u003e 0` so an idle service reports no data rather than NaN.",
+          "transparent": false,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 6,
+            "x": 0,
+            "y": 10
+          },
+          "repeatDirection": "h",
+          "options": {
+            "graphMode": "area",
+            "colorMode": "value",
+            "justifyMode": "auto",
+            "textMode": "auto",
+            "wideLayout": true,
+            "showPercentChange": false,
+            "reduceOptions": {
+              "values": false,
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "percentChangeColorMode": "standard",
+            "orientation": ""
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit"
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "stat",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${ds}"
+              },
+              "expr": "up{job=~\"$job\"}",
+              "instant": false,
+              "legendFormat": "{{instance}}",
+              "range": true
+            }
+          ],
+          "title": "Targets up",
+          "description": "Scrape health. A board showing nothing is ambiguous until you know whether the target is even up.",
+          "transparent": false,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 6,
+            "x": 6,
+            "y": 10
+          },
+          "repeatDirection": "h",
+          "options": {
+            "graphMode": "area",
+            "colorMode": "value",
+            "justifyMode": "auto",
+            "textMode": "auto",
+            "wideLayout": true,
+            "showPercentChange": false,
+            "reduceOptions": {
+              "values": false,
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "percentChangeColorMode": "standard",
+            "orientation": ""
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "timeseries",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${ds}"
+              },
+              "expr": "changes(process_start_time_seconds{job=~\"$job\"}[$__range])",
+              "instant": false,
+              "legendFormat": "{{instance}}",
+              "range": true
+            }
+          ],
+          "title": "Restarts",
+          "description": "Process starts over the selected range.",
+          "transparent": false,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 12,
+            "y": 10
+          },
+          "repeatDirection": "h",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": []
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "min": 0,
+              "custom": {
+                "gradientMode": "none",
+                "lineWidth": 1,
+                "fillOpacity": 8,
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "row",
+          "collapsed": false,
+          "title": "Go runtime",
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 16
+          },
+          "id": 0,
+          "panels": []
+        },
+        {
+          "type": "timeseries",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${ds}"
+              },
+              "expr": "sum(go_goroutines{job=~\"$job\"}) by (instance)",
+              "instant": false,
+              "legendFormat": "{{instance}}",
+              "range": true
+            }
+          ],
+          "title": "Goroutines",
+          "transparent": false,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 8,
+            "x": 0,
+            "y": 17
+          },
+          "repeatDirection": "h",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": []
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "min": 0,
+              "custom": {
+                "gradientMode": "none",
+                "lineWidth": 1,
+                "fillOpacity": 8,
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "timeseries",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${ds}"
+              },
+              "expr": "sum(go_memstats_heap_alloc_bytes{job=~\"$job\"}) by (instance)",
+              "instant": false,
+              "legendFormat": "{{instance}}",
+              "range": true
+            }
+          ],
+          "title": "Heap in use",
+          "transparent": false,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 8,
+            "x": 8,
+            "y": 17
+          },
+          "repeatDirection": "h",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": []
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "decbytes",
+              "min": 0,
+              "custom": {
+                "gradientMode": "none",
+                "lineWidth": 1,
+                "fillOpacity": 8,
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "timeseries",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${ds}"
+              },
+              "expr": "sum(rate(process_cpu_seconds_total{job=~\"$job\"}[$__rate_interval])) by (instance)",
+              "instant": false,
+              "legendFormat": "{{instance}}",
+              "range": true
+            }
+          ],
+          "title": "CPU",
+          "description": "CPU seconds consumed per second; 1 means one core saturated.",
+          "transparent": false,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 8,
+            "x": 16,
+            "y": 17
+          },
+          "repeatDirection": "h",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": []
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "min": 0,
+              "custom": {
+                "gradientMode": "none",
+                "lineWidth": 1,
+                "fillOpacity": 8,
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          }
+        }
+      ],
+      "templating": {
+        "list": [
+          {
+            "type": "datasource",
+            "name": "ds",
+            "label": "Datasource",
+            "skipUrlSync": false,
+            "query": "prometheus",
+            "current": {
+              "text": "VictoriaMetrics (Prometheus)",
+              "value": "VictoriaMetrics (Prometheus)"
+            },
+            "multi": false,
+            "allowCustomValue": false,
+            "includeAll": false,
+            "auto": false,
+            "auto_min": "10s",
+            "auto_count": 30
+          },
+          {
+            "type": "query",
+            "name": "job",
+            "label": "Service",
+            "skipUrlSync": false,
+            "query": "label_values(up, job)",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${ds}"
+            },
+            "multi": true,
+            "allowCustomValue": true,
+            "refresh": 2,
+            "sort": 1,
+            "includeAll": true,
+            "auto": false,
+            "auto_min": "10s",
+            "auto_count": 30
+          }
+        ]
+      },
+      "annotations": {},
+      "links": [
+        {
+          "title": "Generated from code — edits here are overwritten",
+          "type": "link",
+          "icon": "code-branch",
+          "tooltip": "",
+          "url": "https://github.com/duynhlab/obs-as-code",
+          "tags": [],
+          "asDropdown": false,
+          "placement": "inControlsMenu",
+          "targetBlank": true,
+          "includeVars": false,
+          "keepTime": false
+        }
+      ]
+    }
   resyncPeriod: 30s
   uid: obs-as-code-example

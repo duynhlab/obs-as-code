@@ -5,6 +5,12 @@ SHELL := /usr/bin/env bash -o pipefail
 
 .DEFAULT_GOAL := help
 
+# Match CI exactly. `toolchain` in go.mod is only a floor — Go happily uses a
+# newer local toolchain — so a developer on Go 1.27 and a runner on 1.26.7 can
+# produce different bytes from identical source. That already happened once:
+# compress/flate output differed between the two, and every `make diff` failed.
+export GOTOOLCHAIN ?= go1.26.7
+
 GO              ?= go
 OUT             ?= generated
 BIN             := $(CURDIR)/bin
@@ -117,14 +123,15 @@ dry-run: ## Server-side dry-run against the current kube context
 	done
 
 .PHONY: preview
-preview: generate ## Run Grafana locally with the rendered models provisioned
+preview: ## Run Grafana locally with the rendered models provisioned
+	$(GO) run ./cmd/generate -out=$(OUT) -models=.preview
 	@echo "→ Grafana on http://localhost:3000 (anonymous admin). Ctrl-C to stop."
 	docker run --rm -p 3000:3000 \
 		-e GF_AUTH_ANONYMOUS_ENABLED=true \
 		-e GF_AUTH_ANONYMOUS_ORG_ROLE=Admin \
 		-e GF_AUTH_DISABLE_LOGIN_FORM=true \
 		-e GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/obs-as-code-example.json \
-		-v "$$PWD/$(OUT)/cluster/models:/var/lib/grafana/dashboards:ro" \
+		-v "$$PWD/.preview/cluster:/var/lib/grafana/dashboards:ro" \
 		-v "$$PWD/hack/provisioning:/etc/grafana/provisioning:ro" \
 		$(GRAFANA_IMAGE)
 
@@ -132,4 +139,4 @@ preview: generate ## Run Grafana locally with the rendered models provisioned
 
 .PHONY: clean
 clean: ## Remove build and coverage artifacts (keeps $(OUT), which is committed)
-	rm -rf $(BIN) coverage.out coverage-integration.out coverage.html
+	rm -rf $(BIN) .preview coverage.out coverage-integration.out coverage.html

@@ -15,9 +15,12 @@ write, so a manual change disappears on the next run — after possibly having
 been applied to a cluster in between.
 
 It *is* committed, so a pull request shows the model change beside the Go change.
-The CR carries the same model gzipped, which is unreadable in a diff; the
-`models/` directory beside it is the reviewable copy. Both come from
-`render.DashboardJSON`, so they cannot disagree.
+The resource embeds the model as a YAML block scalar under `spec.json`, so the
+resource *is* the reviewable artifact — there is no second copy to drift.
+
+`make preview` needs loose JSON files for Grafana's file provisioning, so
+`generate -models <dir>` writes them on request into a gitignored directory.
+Never commit those.
 
 ## Hand-written CR structs
 
@@ -39,8 +42,10 @@ one means the catalog moved and the check has quietly stopped checking.
 - The content fields — `json`, `gzipJson`, `url`, `jsonnet`, `configMapRef`,
   `grafanaCom`, `oci` — are mutually exclusive, and so are `folder`,
   `folderUID` and `folderRef`. This repo uses `gzipJson` and `folderRef`.
-- `gzipJson` is gzip **then** base64. The base64 is `encoding/json` rendering a
-  `[]byte`; do not encode it by hand.
+- `gzipJson` exists and is **not** used. It is gzip then base64, and gzip output
+  is not byte-stable across Go releases: `compress/flate` produced different
+  bytes under Go 1.26.7 and 1.27.0 for identical input, which broke `make diff`
+  on any toolchain mismatch. `spec.json` is stable and readable.
 - `spec.oci` exists as of operator 5.24.0 and keeps a model out of etcd
   entirely. That is the escape hatch if a board ever exceeds the size budget —
   splitting the board is the better first answer.
@@ -50,9 +55,20 @@ one means the catalog moved and the check has quietly stopped checking.
 ## Determinism
 
 Output is committed, so anything non-reproducible shows up as a phantom diff on
-an unrelated pull request. Two things are pinned for this: the gzip header
-fields in `gzip.go`, and the sort in `Selector.Matchers`. If you add anything
-that iterates a map on the way to output, sort it.
+an unrelated pull request — or, worse, as a CI failure on someone else's change.
+
+Three things are pinned for this:
+
+- `GOTOOLCHAIN` in the Makefile, because output must not depend on which Go the
+  author happens to have installed
+- the sort in `Selector.Matchers`, because map iteration order is randomised
+- storing the model uncompressed, because a compressor's output is an
+  implementation detail that changes between releases
+
+If you add anything that iterates a map on the way to output, sort it. If you
+add anything whose bytes come from a library rather than from your own code, ask
+whether that library promises stability — `encoding/json` does, `compress/flate`
+does not.
 
 ## Adding a check
 
