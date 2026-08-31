@@ -34,7 +34,7 @@ every file there, and `make diff` fails if the tree and the code disagree.
     internal/catalog        imports every resource package; runs the conformance suite
     internal/dashboards/*   one file per board
     internal/alerts/*        one file per alert group
-    flux/                   manifests for homelab to copy; not applied from here
+    docs/flux/              manifests for homelab to copy; not applied from here
 
 ## Rules
 
