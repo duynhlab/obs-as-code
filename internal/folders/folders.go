@@ -51,13 +51,17 @@ var (
 	// Databases holds CloudNativePG, PgBouncer and PgDog boards.
 	Databases = Folder{UID: "databases", Title: "Databases"}
 
-	// Kubernetes holds cluster, node and workload boards.
-	Kubernetes = Folder{UID: "kubernetes", Title: "Kubernetes"}
+	// PlatformInfrastructure holds cluster, node and platform-component boards.
+	//
+	// The title matches what the cluster's Grafana already shows — spaces around
+	// the slash included. There is no "Kubernetes" folder there, and inventing
+	// one would leave two near-identical folders for a reader to choose between.
+	PlatformInfrastructure = Folder{UID: "platform-infrastructure", Title: "Platform / Infrastructure"}
 )
 
 // all is the registration order; All returns a copy so a caller cannot reorder
 // or extend the package's own list.
-var all = []Folder{Examples, GoldenSignals, Business, APIGateway, Databases, Kubernetes}
+var all = []Folder{Examples, GoldenSignals, Business, APIGateway, Databases, PlatformInfrastructure}
 
 // All returns every declared folder, in declaration order.
 func All() []Folder { return slices.Clone(all) }
