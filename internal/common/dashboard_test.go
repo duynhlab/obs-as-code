@@ -1,0 +1,77 @@
+package common_test
+
+import (
+	"testing"
+
+	"github.com/duynhlab/obs-as-code/internal/common"
+	"github.com/duynhlab/obs-as-code/internal/profile"
+)
+
+func TestNewDashboardAppliesHouseDefaults(t *testing.T) {
+	t.Parallel()
+
+	p := profile.Cluster()
+
+	board, err := common.NewDashboard(p, "defaults", "Defaults").Build()
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	if board.Uid == nil || *board.Uid != "defaults" {
+		t.Errorf("Uid = %v, want %q", board.Uid, "defaults")
+	}
+	if board.Refresh == nil || *board.Refresh != "1m" {
+		t.Errorf("Refresh = %v, want %q", board.Refresh, "1m")
+	}
+	if board.Time == nil || board.Time.From != "now-6h" {
+		t.Errorf("Time.From = %v, want %q", board.Time, "now-6h")
+	}
+
+	// Every generated board must be findable as generated.
+	var tagged bool
+	for _, tag := range board.Tags {
+		if tag == common.Tag {
+			tagged = true
+		}
+	}
+	if !tagged {
+		t.Errorf("Tags = %v, want it to include %q", board.Tags, common.Tag)
+	}
+
+	// Without the datasource variable, "${ds}" resolves to nothing and every
+	// panel on the board renders empty.
+	if len(board.Templating.List) == 0 {
+		t.Fatal("board has no template variables; the datasource variable is missing")
+	}
+	if got, want := board.Templating.List[0].Name, p.MetricsVar; got != want {
+		t.Errorf("first variable = %q, want %q", got, want)
+	}
+
+	// The link back to source is what stops someone editing a generated board
+	// in the UI and losing the change on the next reconcile.
+	if len(board.Links) == 0 {
+		t.Fatal("board has no links; nothing points a reader at the source")
+	}
+	if got := board.Links[0].Url; got == nil || *got != p.SourceURL {
+		t.Errorf("link url = %v, want %q", got, p.SourceURL)
+	}
+}
+
+func TestNewDashboardCarriesExtraTags(t *testing.T) {
+	t.Parallel()
+
+	board, err := common.NewDashboard(profile.Cluster(), "tagged", "Tagged", "http", "golden-signals").Build()
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	want := []string{common.Tag, "http", "golden-signals"}
+	if len(board.Tags) != len(want) {
+		t.Fatalf("Tags = %v, want %v", board.Tags, want)
+	}
+	for i, tag := range want {
+		if board.Tags[i] != tag {
+			t.Errorf("Tags[%d] = %q, want %q", i, board.Tags[i], tag)
+		}
+	}
+}

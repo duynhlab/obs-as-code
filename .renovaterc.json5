@@ -1,0 +1,38 @@
+{
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+  extends: [
+    'config:recommended',
+    ':semanticCommitsDisabled',
+  ],
+  timezone: 'Asia/Ho_Chi_Minh',
+  schedule: ['* 0-4 * * *'],
+  prConcurrentLimit: 3,
+  postUpdateOptions: ['gomodTidy'],
+  packageRules: [
+    {
+      // The Foundation SDK is public preview and reshapes types between
+      // releases. Its golden-file diff is the review, so the PR has to carry
+      // the regenerated output — which needs a human running `make golden`.
+      matchPackageNames: ['github.com/grafana/grafana-foundation-sdk/go'],
+      dependencyDashboardApproval: true,
+      addLabels: ['sdk-upgrade', 'needs-golden-review'],
+    },
+    {
+      // prometheus/prometheus is here only for promql/parser, and it drags a
+      // 250-module graph behind it. One grouped PR instead of a weekly stream.
+      matchSourceUrls: ['https://github.com/prometheus/**'],
+      groupName: 'prometheus',
+    },
+    {
+      // The linter is pinned in tools/go.mod precisely so it stays current.
+      matchFileNames: ['tools/go.mod'],
+      groupName: 'go tooling',
+      automerge: false,
+    },
+    {
+      matchManagers: ['github-actions'],
+      groupName: 'github actions',
+      pinDigests: true,
+    },
+  ],
+}
