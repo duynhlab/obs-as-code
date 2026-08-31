@@ -48,6 +48,4 @@ that exists to prove the whole delivery path. Porting real boards is the next
 wave; the boards still live in `duynhlab/grafana-dashboards` until then.
 
 Delivery to the cluster needs two manifests copied into homelab — see
-[`flux/README.md`](flux/README.md), which also records the one open question:
-this repository is private, so its GHCR package is too, and Flux needs either a
-pull secret or a public package.
+[`flux/README.md`](flux/README.md).

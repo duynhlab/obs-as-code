@@ -85,5 +85,4 @@ the reader why they should care.
 Tag → `release.yaml` → OCI artifact on GHCR → homelab `OCIRepository` pinned by
 semver → `Kustomization` → operator → Grafana. Flux in that cluster consumes only
 OCIRepositories; there is no `GitRepository` to point at. `flux/` holds the two
-manifests homelab needs, and `flux/README.md` has the open question about pulling
-a private package.
+manifests homelab needs.

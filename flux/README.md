@@ -28,19 +28,13 @@ Copy the two files into homelab:
 Then add the source to `kubernetes/clusters/local/sources/kustomization.yaml`
 and the Kustomization to the cluster's resource list.
 
-## Open item — registry authentication
+## Registry authentication
 
-`duynhlab/obs-as-code` is a **private** repository, so its GHCR package is
-private too and Flux needs `spec.secretRef` pointing at a
-`kubernetes.io/dockerconfigjson` secret. The three OCI sources already in the
-cluster all pull public packages, so there is no existing secret to reuse.
+`duynhlab/obs-as-code` is public, and so is its GHCR package, so Flux pulls
+anonymously and no `secretRef` is needed. Generated resources carry metric
+names, PromQL and panel titles — nothing that needs protecting.
 
-Two ways forward:
-
-1. **Make the GHCR package public.** Generated dashboards contain no secrets —
-   metric names, PromQL, and panel titles. This is the recommended option and
-   needs no cluster change.
-2. Provision a pull secret through the ExternalSecrets/OpenBAO path already in
-   the cluster, and add `secretRef` to the OCIRepository.
-
-Until one is chosen, the OCIRepository below will fail to pull with a 401.
+If the repository is ever made private again, the package follows and this
+OCIRepository starts failing with a 401. The fix then is a
+`kubernetes.io/dockerconfigjson` secret through the ExternalSecrets/OpenBAO path
+already in the cluster, referenced from `spec.secretRef`.

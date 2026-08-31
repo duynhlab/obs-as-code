@@ -15,8 +15,6 @@ spec:
   url: oci://ghcr.io/duynhlab/obs-as-code
   ref:
     semver: ">=0.1.0"
-  # The repository is private, so this is required until the GHCR package is
-  # made public. See README.md — "Open item — registry authentication".
-  #
-  # secretRef:
-  #   name: ghcr-pull
+  # No secretRef: the package is public, so Flux pulls anonymously. If the
+  # repository ever goes private the package follows and this starts failing
+  # with a 401 — see README.md, "Registry authentication".
