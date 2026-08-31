@@ -48,4 +48,4 @@ that exists to prove the whole delivery path. Porting real boards is the next
 wave; the boards still live in `duynhlab/grafana-dashboards` until then.
 
 Delivery to the cluster needs two manifests copied into homelab — see
-[`flux/README.md`](flux/README.md).
+[`docs/flux/README.md`](docs/flux/README.md).

@@ -2,7 +2,7 @@
 paths:
   - "internal/render/**/*.go"
   - "internal/check/**/*.go"
-  - "flux/**"
+  - "docs/flux/**"
   - "generated/**"
 ---
 
@@ -84,5 +84,5 @@ the reader why they should care.
 
 Tag → `release.yaml` → OCI artifact on GHCR → homelab `OCIRepository` pinned by
 semver → `Kustomization` → operator → Grafana. Flux in that cluster consumes only
-OCIRepositories; there is no `GitRepository` to point at. `flux/` holds the two
+OCIRepositories; there is no `GitRepository` to point at. `docs/flux/` holds the two
 manifests homelab needs.
