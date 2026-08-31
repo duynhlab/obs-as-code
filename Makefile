@@ -20,7 +20,7 @@ help: ## Display this help
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
 .PHONY: check
-check: fmt vet lint test generate diff validate ## Everything CI runs; green before every commit
+check: tidy-check fmt vet build-linux lint test generate diff validate ## Everything CI runs; green before every commit
 
 ##@ Go
 
@@ -28,6 +28,28 @@ check: fmt vet lint test generate diff validate ## Everything CI runs; green bef
 tidy: ## Tidy go.mod for the module and the tools module
 	$(GO) mod tidy
 	$(GO) -C tools mod tidy
+
+# `go mod tidy` records go.sum entries for every build configuration, not just
+# the host's. Skipping it hides a Linux-only dependency until CI finds it: for
+# example client_golang pulls in procfs from a file that only builds on Linux,
+# so a macOS `go build` passes and the runner fails on a missing go.sum entry.
+.PHONY: tidy-check
+tidy-check: ## Fail if go.mod or go.sum is not tidy
+	@$(GO) mod tidy
+	@$(GO) -C tools mod tidy
+	@if [[ -n "$$(git status --porcelain -- go.mod go.sum tools/go.mod tools/go.sum)" ]]; then \
+		echo "✘ go.mod/go.sum are not tidy. Run 'make tidy' and commit the result."; \
+		git --no-pager diff -- go.mod go.sum tools/go.mod tools/go.sum; \
+		exit 1; \
+	fi
+	@echo "✔ modules are tidy"
+
+# The generator only ever runs on Linux in CI and on a developer's machine, but
+# the dependency graph differs per platform. Compiling for Linux locally catches
+# a build-tagged import before it reaches a runner.
+.PHONY: build-linux
+build-linux: ## Cross-compile for linux/amd64, the platform CI builds on
+	GOOS=linux GOARCH=amd64 $(GO) build ./...
 
 .PHONY: fmt
 fmt: ## Format all Go code
