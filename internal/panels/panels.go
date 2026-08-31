@@ -12,6 +12,8 @@ package panels
 
 import (
 	"github.com/grafana/grafana-foundation-sdk/go/common"
+	"github.com/grafana/grafana-foundation-sdk/go/dashboard"
+	"github.com/grafana/grafana-foundation-sdk/go/gauge"
 	"github.com/grafana/grafana-foundation-sdk/go/prometheus"
 	"github.com/grafana/grafana-foundation-sdk/go/stat"
 	"github.com/grafana/grafana-foundation-sdk/go/timeseries"
@@ -49,6 +51,52 @@ func Stat(p profile.Profile, title, expr, legend string) *stat.PanelBuilder {
 			Calcs([]string{"lastNotNull"}).
 			Values(false)).
 		WithTarget(Target(p, expr, legend))
+}
+
+// Gauge returns a single-value panel drawn as a dial against thresholds.
+//
+// Used where a number only means something relative to a limit — a ratio, a
+// saturation level. For a bare count, Stat says the same thing with less ink.
+func Gauge(p profile.Profile, title, expr, legend string) *gauge.PanelBuilder {
+	return gauge.NewPanelBuilder().
+		Title(title).
+		Datasource(p.MetricsRef()).
+		ShowThresholdMarkers(true).
+		ShowThresholdLabels(false).
+		ReduceOptions(common.NewReduceDataOptionsBuilder().
+			Calcs([]string{"lastNotNull"}).
+			Values(false)).
+		WithTarget(Target(p, expr, legend))
+}
+
+// Thresholds builds an absolute threshold set from a base colour and ordered
+// steps.
+//
+// The base step must carry a nil value, not zero: Grafana serialises the
+// -Infinity lower bound as null, and a step at 0 is a different thing that
+// renders differently. Every panel has one, so getting it wrong is a whole-board
+// mistake.
+func Thresholds(base string, steps ...ThresholdStep) *dashboard.ThresholdsConfigBuilder {
+	out := make([]dashboard.Threshold, 0, len(steps)+1)
+	out = append(out, dashboard.Threshold{Color: base, Value: nil})
+	for _, s := range steps {
+		value := s.At
+		out = append(out, dashboard.Threshold{Color: s.Color, Value: &value})
+	}
+
+	return dashboard.NewThresholdsConfigBuilder().
+		Mode(dashboard.ThresholdsModeAbsolute).
+		Steps(out)
+}
+
+// ThresholdStep is one colour change, at an absolute value.
+//
+// Absolute rather than percentage: percentage mode is relative to the field's
+// min and max, so a "70" on a 0..1 ratio means 0.7 — correct, and read as a
+// mistake by everyone who sees it.
+type ThresholdStep struct {
+	At    float64
+	Color string
 }
 
 // defaultTimeseries is the shared base every time series panel starts from, so

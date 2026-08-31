@@ -3,5 +3,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
+  - grafanadashboard/kubernetes-cluster-overview.yaml
   - grafanadashboard/obs-as-code-example.yaml
   - grafanafolder/obs-as-code-examples.yaml
+  - grafanafolder/platform-infrastructure.yaml

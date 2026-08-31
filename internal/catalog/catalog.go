@@ -10,4 +10,5 @@ package catalog
 import (
 	_ "github.com/duynhlab/obs-as-code/internal/alerts/example"
 	_ "github.com/duynhlab/obs-as-code/internal/dashboards/example"
+	_ "github.com/duynhlab/obs-as-code/internal/dashboards/kubernetes"
 )
