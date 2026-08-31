@@ -1,0 +1,51 @@
+name: Release
+
+# Publishes the rendered resources as an OCI artifact. Flux in homelab consumes
+# it through an OCIRepository pinned by semver, which is how every other source
+# in that cluster is wired — there is no GitRepository anywhere to point at.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  artifact:
+    name: Push OCI artifact
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Setup Flux CLI
+        uses: fluxcd/flux2/action@8d5f40dca5aa5d3c0fc3414457dda15a0ac92fa4 # v2.7.5
+
+      # Regenerated rather than trusted: a tag pushed from a stale working tree
+      # would otherwise publish output nobody reviewed.
+      - name: Generate
+        run: make generate
+
+      - name: Fail if the tagged tree is out of sync
+        run: make diff
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Push artifact
+        run: |
+          flux push artifact "oci://ghcr.io/${{ github.repository }}:${GITHUB_REF_NAME}" \
+            --path=./generated \
+            --source="${{ github.server_url }}/${{ github.repository }}" \
+            --revision="${GITHUB_REF_NAME}@sha1:${GITHUB_SHA}"
+
+      - name: Tag artifact as latest
+        run: |
+          flux tag artifact "oci://ghcr.io/${{ github.repository }}:${GITHUB_REF_NAME}" --tag=latest

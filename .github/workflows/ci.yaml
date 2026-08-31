@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Build, vet, lint and test. The linter version comes from tools/go.mod, so
+  # this job and a developer's `make lint` are the same binary.
+  go-check:
+    uses: duynhlab/gha-workflows/.github/workflows/go-check.yml@e321897e5c28e7c861b9d8beb37614e1c5823f42 # main
+    with:
+      command-test: 'go test -race -covermode=atomic -coverprofile=coverage.out ./...'
+      lint: true
+      lint-path: '.golangci.yml'
+
+  # The gate that keeps the committed tree honest. Generated output is committed
+  # by the author so a pull request shows the JSON change beside the Go change;
+  # this job proves the two have not drifted.
+  generated:
+    name: Generated output
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Setup kustomize
+        uses: fluxcd/pkg/actions/kustomize@dfc427c54394de76e0053c2eba45699fad01c3b4 # main 2026-08-19
+
+      # Validates against the real CRD OpenAPI schemas from the datree
+      # CRDs-catalog. -ignore-missing-schemas is deliberately absent: every kind
+      # this repo emits has a schema, so a missing one means the catalog moved
+      # and the check has quietly stopped checking.
+      - name: Setup kubeconform
+        uses: fluxcd/pkg/actions/kubeconform@dfc427c54394de76e0053c2eba45699fad01c3b4 # main 2026-08-19
+
+      - name: Generate
+        run: make generate
+
+      - name: Check generated output is in sync
+        run: make diff
+
+      - name: Validate against CRD schemas
+        run: make validate

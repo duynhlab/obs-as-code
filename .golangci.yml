@@ -1,0 +1,128 @@
+# golangci-lint configuration. The version is pinned in tools/go.mod, so a
+# developer and CI build the same linter from the same module.
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+  relative-path-mode: gomod
+  modules-download-mode: readonly
+  allow-parallel-runners: true
+
+linters:
+  default: none
+
+  enable:
+    # Go core
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+
+    # Errors and correctness
+    - durationcheck
+    - errorlint
+    - nilerr
+    - nilnesserr
+    - wastedassign
+
+    # Security and encoding
+    - asciicheck
+    - bidichk
+    - gosec
+
+    # Maintainability
+    - gocritic
+    - misspell
+    - nakedret
+    - nolintlint
+    - unconvert
+    - whitespace
+
+    # Architecture boundaries, below.
+    - depguard
+
+  settings:
+    errcheck:
+      check-type-assertions: true
+
+    nolintlint:
+      # A //nolint with no reason is a decision nobody can review later.
+      require-explanation: true
+      require-specific: true
+
+    depguard:
+      rules:
+        # internal/queries must stay free of every Grafana type.
+        #
+        # The point of the package is that one expression feeds a dashboard
+        # panel AND an alert rule, so a graph and the alert about it cannot
+        # disagree. A query that knows what a panel is cannot be reused by an
+        # alert, and the guarantee is gone. If depguard rejects an import here,
+        # the import is wrong — not this rule.
+        queries-are-engine-agnostic:
+          files:
+            - "internal/queries/**"
+          deny:
+            - pkg: github.com/grafana/grafana-foundation-sdk
+              desc: queries are plain PromQL strings; return a string and let the caller build the panel
+            - pkg: github.com/duynhlab/obs-as-code/internal/render
+              desc: queries know nothing about Kubernetes resources
+            - pkg: github.com/duynhlab/obs-as-code/internal/panels
+              desc: panels compose queries, never the other way round
+
+        # Resource files declare what to build; they never emit resources.
+        #
+        # A dashboard file that reaches into internal/render can set its own
+        # namespace, instance selector or folder, and then the conformance rules
+        # in internal/check are checking one path while that board takes
+        # another.
+        resources-do-not-render:
+          files:
+            - "internal/dashboards/**"
+            - "internal/alerts/**"
+          deny:
+            - pkg: github.com/duynhlab/obs-as-code/internal/render
+              desc: registry renders; a resource file only declares Meta and a Build function
+
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      # The Foundation SDK marks the classic dashboard model deprecated in
+      # favour of dashboardv2, but v2 is not what anything downstream reads:
+      # GrafanaDashboard.spec.gzipJson carries a classic model, and every one of
+      # the cluster's existing boards is one. Moving would mean the operator and
+      # Grafana 13.2 rejecting or silently mis-rendering the output. Revisit when
+      # grafana-operator documents v2 support; until then the warning is noise
+      # about a migration that cannot be made yet.
+      - linters: [staticcheck]
+        text: "SA1019.*(dashboard\\.Dashboard|dashboard\\.NewDashboardBuilder|dashboard\\.DashboardBuilder)"
+
+      # gosec's threat model is production code handling untrusted input. In
+      # tests, 0644 fixture files and a seeded PRNG are the correct choices, and
+      # silencing each one individually buries the real findings.
+      - linters: [gosec]
+        path: _test\.go
+
+      # The generator writes files meant to be committed and read by everyone
+      # who clones the repo; 0600 would make them unreadable to the tools that
+      # consume them. Every path written is inside the output directory, which
+      # is derived from a flag, not from untrusted input.
+      - linters: [gosec]
+        text: "G306"
+        path: cmd/generate/
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/duynhlab/obs-as-code

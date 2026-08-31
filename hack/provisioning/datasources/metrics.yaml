@@ -1,0 +1,17 @@
+# Local preview only (make preview). Not applied to any cluster.
+#
+# Named and typed to match profile.Cluster(): a prometheus-type datasource, so
+# the same board renders here and against the real backend. The URL points at
+# nothing, which is the point — preview checks layout, units and titles, not
+# data.
+apiVersion: 1
+datasources:
+  - name: VictoriaMetrics (Prometheus)
+    type: prometheus
+    uid: victoriametrics-prometheus
+    access: proxy
+    url: http://localhost:8428
+    isDefault: true
+    jsonData:
+      httpMethod: POST
+      timeInterval: 15s
