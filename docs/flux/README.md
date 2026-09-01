@@ -31,13 +31,31 @@ spec:
   resyncPeriod: 30s
   oci:
     reference: ghcr.io/duynhlab/obs-as-code:v0.2.0
-    path: dashboards/kubernetes-cluster-overview.json
+    path: cluster/dashboards/kubernetes-cluster-overview.json
 ```
 
-`path` must match the generated filename, which is always
-`dashboards/<uid>.json`. That coupling is deliberate: renaming a board's uid
-makes the operator's fetch **fail and say so in the resource's status**, rather
-than leaving a stale board quietly serving old panels.
+`path` must match the file's location inside the artifact, which is
+`<profile>/dashboards/<uid>.json` — **including the profile directory**. Today
+there is one profile, `cluster`, so every path starts `cluster/`. The profile
+dimension exists so a second target (a local stack, a different backend) can be
+rendered from the same boards without changing them.
+
+To see the exact paths an artifact contains:
+
+```console
+$ flux pull artifact oci://ghcr.io/duynhlab/obs-as-code:v0.2.0 --output /tmp/a
+$ (cd /tmp/a && find . -name '*.json' | sed 's|^\./||')
+cluster/dashboards/kubernetes-cluster-overview.json
+cluster/dashboards/obs-as-code-example.json
+```
+
+Read the path from the artifact rather than transcribing it: a wrong `path` is a
+fetch failure at reconcile time, and the resource's status is the only place it
+shows.
+
+The coupling to the uid is deliberate. Renaming a board makes the fetch **fail
+and say so in the resource's status**, rather than leaving a stale board quietly
+serving old panels.
 
 No `pullSecretRef`: the repository is public, so the package is too and the
 operator pulls anonymously.
