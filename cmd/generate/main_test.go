@@ -37,11 +37,11 @@ func TestRunPrunesStaleFiles(t *testing.T) {
 		t.Fatalf("run() error = %v", err)
 	}
 
-	// A resource deleted from the code must not leave its manifest behind: Flux
-	// would keep applying it, so the board would outlive the commit that
-	// removed it.
-	stale := filepath.Join(out, "cluster", "grafanadashboard", "deleted-board.yaml")
-	if err := os.WriteFile(stale, []byte("kind: GrafanaDashboard\n"), 0o644); err != nil {
+	// A board deleted from the code must not leave its JSON behind: it would stay
+	// in the published artifact and any GrafanaDashboard pointing at it would
+	// keep serving it, so the board would outlive the commit that removed it.
+	stale := filepath.Join(out, "cluster", "dashboards", "deleted-board.json")
+	if err := os.WriteFile(stale, []byte(`{"uid":"deleted-board"}`), 0o644); err != nil {
 		t.Fatalf("seed stale file: %v", err)
 	}
 	// A non-generated file must survive.
@@ -56,7 +56,7 @@ func TestRunPrunesStaleFiles(t *testing.T) {
 	}
 
 	if _, err := os.Stat(stale); !os.IsNotExist(err) {
-		t.Errorf("stale manifest survived: %v", err)
+		t.Errorf("stale dashboard JSON survived: %v", err)
 	}
 	if !strings.Contains(log.String(), "removed") {
 		t.Errorf("run() did not report the removal:\n%s", log.String())
@@ -83,7 +83,7 @@ func TestRunRendersASingleProfile(t *testing.T) {
 		t.Fatalf("run() error = %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(out, "cluster", "kustomization.yaml")); err != nil {
+	if _, err := os.Stat(filepath.Join(out, "cluster", "dashboards")); err != nil {
 		t.Errorf("cluster profile was not rendered: %v", err)
 	}
 }

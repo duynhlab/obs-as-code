@@ -16,7 +16,6 @@ OUT             ?= generated
 BIN             := $(CURDIR)/bin
 GOLANGCI_LINT   := $(BIN)/golangci-lint
 GO_TEST_ARGS    ?= -race
-CRD_SCHEMAS     := https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json
 GRAFANA_IMAGE   ?= grafana/grafana:13.2.0
 
 ##@ General
@@ -26,7 +25,7 @@ help: ## Display this help
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
 .PHONY: check
-check: tidy-check fmt vet build-linux lint test generate diff validate ## Everything CI runs; green before every commit
+check: tidy-check fmt vet build-linux lint test generate diff ## Everything CI runs; green before every commit
 
 ##@ Go
 
@@ -89,7 +88,7 @@ golden: ## Rewrite golden files, then review the diff before committing
 ##@ Generate
 
 .PHONY: generate
-generate: ## Render every resource into $(OUT)
+generate: ## Render every dashboard to JSON in $(OUT)
 	$(GO) run ./cmd/generate -out=$(OUT)
 
 .PHONY: diff
@@ -101,37 +100,16 @@ diff: ## Fail if $(OUT) is not in sync with the code
 	fi
 	@echo "✔ $(OUT) is in sync"
 
-.PHONY: validate
-validate: ## Validate rendered resources against the real CRD schemas
-	@for dir in $(OUT)/*/; do \
-		profile=$$(basename "$$dir"); \
-		echo "→ $$profile"; \
-		kustomize build "$$dir" | kubeconform \
-			-strict \
-			-summary \
-			-schema-location default \
-			-schema-location '$(CRD_SCHEMAS)' \
-			-; \
-	done
-
-##@ Cluster
-
-.PHONY: dry-run
-dry-run: ## Server-side dry-run against the current kube context
-	@for dir in $(OUT)/*/; do \
-		kustomize build "$$dir" | kubectl apply --dry-run=server -f -; \
-	done
+##@ Preview
 
 .PHONY: preview
-preview: ## Run Grafana locally with the rendered models provisioned
-	$(GO) run ./cmd/generate -out=$(OUT) -models=.preview
+preview: generate ## Run Grafana locally with the generated dashboards provisioned
 	@echo "→ Grafana on http://localhost:3000 (anonymous admin). Ctrl-C to stop."
 	docker run --rm -p 3000:3000 \
 		-e GF_AUTH_ANONYMOUS_ENABLED=true \
 		-e GF_AUTH_ANONYMOUS_ORG_ROLE=Admin \
 		-e GF_AUTH_DISABLE_LOGIN_FORM=true \
-		-e GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/obs-as-code-example.json \
-		-v "$$PWD/.preview/cluster:/var/lib/grafana/dashboards:ro" \
+		-v "$$PWD/$(OUT)/cluster/dashboards:/var/lib/grafana/dashboards:ro" \
 		-v "$$PWD/hack/provisioning:/etc/grafana/provisioning:ro" \
 		$(GRAFANA_IMAGE)
 

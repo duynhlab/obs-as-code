@@ -1,9 +1,9 @@
 // Package common builds the dashboard every board starts from.
 //
 // One function applies every house default, so a board file states only what
-// makes it different. The previous repo had no such place, and the result was
-// twenty-one boards with schemaVersion spanning 27 to 41, four different
-// spellings of the datasource variable, and two boards sharing a title.
+// makes it different. The repo this replaces had no such place, and the result
+// was twenty-one boards with schemaVersion spanning 27 to 41, four spellings of
+// the datasource variable, and two boards sharing a title.
 package common
 
 import (
@@ -11,21 +11,26 @@ import (
 	"github.com/grafana/grafana-foundation-sdk/go/dashboard"
 
 	"github.com/duynhlab/obs-as-code/internal/profile"
+	"github.com/duynhlab/obs-as-code/internal/registry"
 )
 
 // Tag marks every board this repo generates, so a Grafana search can separate
 // generated boards from anything still imported by hand.
 const Tag = "obs-as-code"
 
-// NewDashboard returns a dashboard carrying the house defaults and the
-// profile's datasource variable.
+// NewDashboard returns a dashboard carrying the house defaults, the profile's
+// datasource variable, and the board's identity from its registration.
 //
-// The variable is not optional: panels reference the datasource as
-// "${<MetricsVar>}", so a board without it renders every panel empty.
-func NewDashboard(p profile.Profile, uid, title string, tags ...string) *dashboard.DashboardBuilder {
-	return dashboard.NewDashboardBuilder(title).
-		Uid(uid).
-		Tags(append([]string{Tag}, tags...)).
+// Taking the Meta rather than loose strings means a board cannot declare one uid
+// to the registry and build another, and cannot forget the owner tag — which is
+// the only place ownership survives now that the output is plain JSON with no
+// resource annotations to carry it.
+func NewDashboard(p profile.Profile, m registry.Meta, tags ...string) *dashboard.DashboardBuilder {
+	all := append([]string{Tag, m.OwnerTag()}, tags...)
+
+	return dashboard.NewDashboardBuilder(m.Title).
+		Uid(m.UID).
+		Tags(all).
 		Refresh("1m").
 		Time("now-6h", "now").
 		Timezone(common.TimeZoneBrowser).

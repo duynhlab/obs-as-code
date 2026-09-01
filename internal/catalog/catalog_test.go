@@ -28,49 +28,24 @@ func TestCatalogIsNotEmpty(t *testing.T) {
 	t.Parallel()
 
 	if len(registry.All()) == 0 {
-		t.Fatal("no resources registered; every conformance test below would pass vacuously")
+		t.Fatal("no dashboards registered; every conformance test below would pass vacuously")
 	}
 }
 
-func TestEveryResourceRenders(t *testing.T) {
+func TestEveryDashboardBuilds(t *testing.T) {
 	t.Parallel()
 
 	for _, p := range profiles() {
-		for _, r := range registry.All() {
-			m := r.Describe()
-
-			t.Run(p.Name+"/"+m.UID, func(t *testing.T) {
+		for _, d := range registry.All() {
+			t.Run(p.Name+"/"+d.UID, func(t *testing.T) {
 				t.Parallel()
 
-				objs, err := r.Render(p)
+				model, err := d.Model(p)
 				if err != nil {
-					t.Fatalf("Render() error = %v", err)
+					t.Fatalf("Model() error = %v", err)
 				}
-				if len(objs) == 0 {
-					t.Fatal("Render() produced no objects")
-				}
-			})
-		}
-	}
-}
-
-func TestEveryResourceObeysTheObjectRules(t *testing.T) {
-	t.Parallel()
-
-	for _, p := range profiles() {
-		for _, r := range registry.All() {
-			m := r.Describe()
-
-			t.Run(p.Name+"/"+m.UID, func(t *testing.T) {
-				t.Parallel()
-
-				objs, err := r.Render(p)
-				if err != nil {
-					t.Fatalf("Render() error = %v", err)
-				}
-
-				if v := check.Objects(m.UID, objs, p.Namespace, p.InstanceLabels); len(v) > 0 {
-					t.Errorf("object rules:\n%s", check.Format(v))
+				if len(model) == 0 {
+					t.Fatal("Model() produced no bytes")
 				}
 			})
 		}
@@ -81,12 +56,7 @@ func TestEveryDashboardObeysTheDashboardRules(t *testing.T) {
 	t.Parallel()
 
 	for _, p := range profiles() {
-		for _, r := range registry.All() {
-			d, isDashboard := r.(registry.Dashboard)
-			if !isDashboard {
-				continue
-			}
-
+		for _, d := range registry.All() {
 			t.Run(p.Name+"/"+d.UID, func(t *testing.T) {
 				t.Parallel()
 
@@ -113,12 +83,7 @@ func TestDashboardGoldenFiles(t *testing.T) {
 	t.Parallel()
 
 	for _, p := range profiles() {
-		for _, r := range registry.All() {
-			d, isDashboard := r.(registry.Dashboard)
-			if !isDashboard {
-				continue
-			}
-
+		for _, d := range registry.All() {
 			t.Run(p.Name+"/"+d.UID, func(t *testing.T) {
 				t.Parallel()
 
@@ -160,66 +125,41 @@ func TestDashboardGoldenFiles(t *testing.T) {
 func TestRenderingIsDeterministic(t *testing.T) {
 	t.Parallel()
 
-	// Generated output is committed, so any instability shows up as a phantom
-	// diff on an unrelated pull request rather than as a test failure here.
+	// Generated output is committed, so instability surfaces as a phantom diff on
+	// an unrelated pull request rather than as a failure here.
 	for _, p := range profiles() {
-		for _, r := range registry.All() {
-			m := r.Describe()
-
-			t.Run(p.Name+"/"+m.UID, func(t *testing.T) {
+		for _, d := range registry.All() {
+			t.Run(p.Name+"/"+d.UID, func(t *testing.T) {
 				t.Parallel()
 
-				first, err := r.Render(p)
+				first, err := d.Model(p)
 				if err != nil {
-					t.Fatalf("Render() error = %v", err)
+					t.Fatalf("Model() error = %v", err)
 				}
-				second, err := r.Render(p)
+				second, err := d.Model(p)
 				if err != nil {
-					t.Fatalf("Render() error = %v", err)
+					t.Fatalf("Model() error = %v", err)
 				}
-				if len(first) != len(second) {
-					t.Fatalf("Render() produced %d then %d objects", len(first), len(second))
-				}
-
-				for i := range first {
-					a, err := first[i].YAML()
-					if err != nil {
-						t.Fatalf("YAML() error = %v", err)
-					}
-					b, err := second[i].YAML()
-					if err != nil {
-						t.Fatalf("YAML() error = %v", err)
-					}
-					if !bytes.Equal(a, b) {
-						t.Errorf("%s is not rendered deterministically", first[i].Path())
-					}
+				if !bytes.Equal(first, second) {
+					t.Errorf("%s is not rendered deterministically", d.UID)
 				}
 			})
 		}
 	}
 }
 
-func TestObjectPathsAreUnique(t *testing.T) {
+func TestFilenamesAreUnique(t *testing.T) {
 	t.Parallel()
 
-	for _, p := range profiles() {
-		seen := make(map[string]string)
+	// Two boards writing the same filename means one silently overwrites the
+	// other on generate — and any GrafanaDashboard whose spec.oci points there
+	// would serve whichever won.
+	seen := make(map[string]string)
 
-		for _, r := range registry.All() {
-			m := r.Describe()
-			objs, err := r.Render(p)
-			if err != nil {
-				t.Fatalf("%s: Render() error = %v", m.UID, err)
-			}
-
-			for _, obj := range objs {
-				// Two resources writing the same path means one silently
-				// overwrites the other on generate.
-				if other, dup := seen[obj.Path()]; dup {
-					t.Errorf("%s and %s both write %s", other, m.UID, obj.Path())
-				}
-				seen[obj.Path()] = m.UID
-			}
+	for _, d := range registry.All() {
+		if other, dup := seen[d.Filename()]; dup {
+			t.Errorf("%s and %s both write %s", other, d.UID, d.Filename())
 		}
+		seen[d.Filename()] = d.UID
 	}
 }

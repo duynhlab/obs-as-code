@@ -5,14 +5,19 @@ import (
 
 	"github.com/duynhlab/obs-as-code/internal/common"
 	"github.com/duynhlab/obs-as-code/internal/profile"
+	"github.com/duynhlab/obs-as-code/internal/registry"
 )
+
+func meta(uid, title string) registry.Meta {
+	return registry.Meta{UID: uid, Title: title, Owner: "platform", Publish: true}
+}
 
 func TestNewDashboardAppliesHouseDefaults(t *testing.T) {
 	t.Parallel()
 
 	p := profile.Cluster()
 
-	board, err := common.NewDashboard(p, "defaults", "Defaults").Build()
+	board, err := common.NewDashboard(p, meta("defaults", "Defaults")).Build()
 	if err != nil {
 		t.Fatalf("Build() error = %v", err)
 	}
@@ -60,12 +65,12 @@ func TestNewDashboardAppliesHouseDefaults(t *testing.T) {
 func TestNewDashboardCarriesExtraTags(t *testing.T) {
 	t.Parallel()
 
-	board, err := common.NewDashboard(profile.Cluster(), "tagged", "Tagged", "http", "golden-signals").Build()
+	board, err := common.NewDashboard(profile.Cluster(), meta("tagged", "Tagged"), "http", "golden-signals").Build()
 	if err != nil {
 		t.Fatalf("Build() error = %v", err)
 	}
 
-	want := []string{common.Tag, "http", "golden-signals"}
+	want := []string{common.Tag, "owner:platform", "http", "golden-signals"}
 	if len(board.Tags) != len(want) {
 		t.Fatalf("Tags = %v, want %v", board.Tags, want)
 	}

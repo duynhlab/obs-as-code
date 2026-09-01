@@ -11,7 +11,7 @@ import (
 func ExampleNewDashboard() {
 	p := profile.Cluster()
 
-	board, err := common.NewDashboard(p, "my-board", "My Board", "http").Build()
+	board, err := common.NewDashboard(p, meta("my-board", "My Board"), "http").Build()
 	if err != nil {
 		panic(err)
 	}
@@ -23,7 +23,7 @@ func ExampleNewDashboard() {
 
 	// Output:
 	// my-board
-	// [obs-as-code http]
+	// [obs-as-code owner:platform http]
 	// 1m
 	// ds
 }
