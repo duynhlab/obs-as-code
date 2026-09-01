@@ -1,10 +1,14 @@
 # obs-as-code
 
-Grafana dashboards and alert rules for the duynhlab platform, written in Go with
-the [Grafana Foundation SDK](https://github.com/grafana/grafana-foundation-sdk)
-and rendered into Grafana Operator custom resources.
+Grafana dashboards for the duynhlab platform, written in Go with the
+[Grafana Foundation SDK](https://github.com/grafana/grafana-foundation-sdk).
 
-    Go  →  make generate  →  generated/  →  tag  →  OCI artifact  →  Flux  →  grafana-operator  →  Grafana
+The output is **plain dashboard JSON** — the same thing you would export from the
+UI, importable into any Grafana. How it reaches a cluster is deliberately not
+this repository's business; see [`docs/flux/`](docs/flux/README.md) for how
+homelab does it.
+
+    Go  →  make generate  →  dashboard JSON  →  tag  →  OCI artifact  →  grafana-operator  →  Grafana
 
 ## Why not JSON
 
@@ -29,8 +33,7 @@ against the engine that runs it and portable to a plain Prometheus.
     make help       # every target
 
 Go 1.26.7 — `make` pins `GOTOOLCHAIN` to it, so a newer local Go still produces
-the output CI expects. `kustomize` and `kubeconform` are needed for
-`make validate`, and Docker for `make preview`.
+the output CI expects. Docker is needed for `make preview`; nothing else.
 
 ## Adding a dashboard
 
@@ -43,9 +46,6 @@ the shortest accurate description of the conventions for humans too.
 
 ## Status
 
-Phase 1: the framework, tooling, tests and CI, plus one published example board
-that exists to prove the whole delivery path. Porting real boards is the next
-wave; the boards still live in `duynhlab/grafana-dashboards` until then.
-
-Delivery to the cluster needs two manifests copied into homelab — see
-[`docs/flux/README.md`](docs/flux/README.md).
+Two boards so far: the permanent example that keeps the conformance suite
+exercised, and the Kubernetes cluster overview. The rest still live in
+`duynhlab/grafana-dashboards` and are ported one at a time.

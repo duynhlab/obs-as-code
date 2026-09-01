@@ -6,7 +6,6 @@ require (
 	github.com/VictoriaMetrics/metricsql v0.87.3
 	github.com/grafana/grafana-foundation-sdk/go v0.0.18
 	github.com/prometheus/prometheus v0.314.0
-	sigs.k8s.io/yaml v1.6.0
 )
 
 require (
@@ -23,7 +22,6 @@ require (
 	github.com/valyala/fastrand v1.1.0 // indirect
 	github.com/valyala/histogram v1.2.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
-	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af // indirect

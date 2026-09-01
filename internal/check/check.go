@@ -1,10 +1,10 @@
 // Package check holds the conformance rules every generated resource must
 // satisfy.
 //
-// The rules run against the rendered JSON and YAML rather than against the Go
-// models that produced them. That costs an unmarshal and buys two things: the
-// rules validate what actually ships, and they keep working when the Foundation
-// SDK — which is public preview and says so — reshapes a type.
+// The rules run against the rendered JSON rather than against the Go models that
+// produced it. That costs an unmarshal and buys two things: the rules validate
+// what actually ships, and they keep working when the Foundation SDK — which is
+// public preview and says so — reshapes a type.
 //
 // Every rule here exists because something went wrong before. Overlapping grid
 // positions and duplicate refIds are both commits in the history of the repo
@@ -21,7 +21,6 @@ import (
 	"strings"
 
 	"github.com/duynhlab/obs-as-code/internal/promql"
-	"github.com/duynhlab/obs-as-code/internal/render"
 )
 
 // Violation is one broken rule.
@@ -43,18 +42,16 @@ func (v Violation) String() string {
 
 // Rule identifiers.
 const (
-	RulePanelNoTarget    = "panel-no-target"
-	RulePanelNoTitle     = "panel-no-title"
-	RuleGridOverlap      = "grid-overlap"
-	RuleDuplicateRefID   = "duplicate-refid"
-	RuleDatasourceRef    = "datasource-ref"
-	RuleNoDatasourceVar  = "no-datasource-variable"
-	RuleQuerySyntax      = "query-syntax"
-	RuleRateInterval     = "rate-interval"
-	RuleForbiddenLabel   = "forbidden-label"
-	RuleDBNamespace      = "db-namespace"
-	RuleObjectNamespace  = "object-namespace"
-	RuleInstanceSelector = "instance-selector"
+	RulePanelNoTarget   = "panel-no-target"
+	RulePanelNoTitle    = "panel-no-title"
+	RuleGridOverlap     = "grid-overlap"
+	RuleDuplicateRefID  = "duplicate-refid"
+	RuleDatasourceRef   = "datasource-ref"
+	RuleNoDatasourceVar = "no-datasource-variable"
+	RuleQuerySyntax     = "query-syntax"
+	RuleRateInterval    = "rate-interval"
+	RuleForbiddenLabel  = "forbidden-label"
+	RuleDBNamespace     = "db-namespace"
 )
 
 // forbiddenLabels are the unbounded-cardinality labels RFC-0017 forbids. A
@@ -284,58 +281,6 @@ func checkGrid(uid string, panels []panel) []Violation {
 					Resource: uid, Rule: RuleGridOverlap,
 					Detail: fmt.Sprintf("panels %q and %q overlap at (%d,%d) and (%d,%d); set layout with .Span()/.Height() and let the SDK compute gridPos",
 						panels[i].Title, panels[j].Title, a.X, a.Y, b.X, b.Y),
-				})
-			}
-		}
-	}
-
-	return out
-}
-
-// Objects runs the rules that apply to a rendered Kubernetes object.
-func Objects(uid string, objs []render.Object, namespace string, instanceLabels map[string]string) []Violation {
-	var out []Violation
-
-	for _, obj := range objs {
-		if obj.Namespace != namespace {
-			out = append(out, Violation{
-				Resource: uid, Rule: RuleObjectNamespace,
-				Detail: fmt.Sprintf("%s is in namespace %q, want %q — the operator runs watchNamespaces=%s and ignores anything else without reporting an error",
-					obj.Kind, obj.Namespace, namespace, namespace),
-			})
-		}
-
-		y, err := obj.YAML()
-		if err != nil {
-			out = append(out, Violation{Resource: uid, Rule: RuleInstanceSelector, Detail: err.Error()})
-			continue
-		}
-
-		// instanceSelector is required by the CRD, and a resource that matches
-		// no Grafana instance is skipped silently.
-		var doc struct {
-			Spec struct {
-				InstanceSelector *struct {
-					MatchLabels map[string]string `json:"matchLabels"`
-				} `json:"instanceSelector"`
-			} `json:"spec"`
-		}
-		if err := yamlUnmarshal(y, &doc); err != nil {
-			out = append(out, Violation{Resource: uid, Rule: RuleInstanceSelector, Detail: err.Error()})
-			continue
-		}
-		if doc.Spec.InstanceSelector == nil {
-			out = append(out, Violation{
-				Resource: uid, Rule: RuleInstanceSelector,
-				Detail: obj.Kind + " has no spec.instanceSelector; the operator will ignore it",
-			})
-			continue
-		}
-		for k, want := range instanceLabels {
-			if doc.Spec.InstanceSelector.MatchLabels[k] != want {
-				out = append(out, Violation{
-					Resource: uid, Rule: RuleInstanceSelector,
-					Detail: fmt.Sprintf("%s selects %s=%q, want %q", obj.Kind, k, doc.Spec.InstanceSelector.MatchLabels[k], want),
 				})
 			}
 		}

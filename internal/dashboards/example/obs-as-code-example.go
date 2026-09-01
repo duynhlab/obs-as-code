@@ -17,7 +17,6 @@ import (
 	"github.com/grafana/grafana-foundation-sdk/go/units"
 
 	"github.com/duynhlab/obs-as-code/internal/common"
-	"github.com/duynhlab/obs-as-code/internal/folders"
 	"github.com/duynhlab/obs-as-code/internal/panels"
 	"github.com/duynhlab/obs-as-code/internal/profile"
 	queries "github.com/duynhlab/obs-as-code/internal/queries/prometheus"
@@ -29,17 +28,17 @@ import (
 // to the code that produced it.
 const uid = "obs-as-code-example"
 
+// meta is declared once and used both to register the board and to build it, so
+// the two cannot disagree about what this board is called.
+var meta = registry.Meta{
+	UID:     uid,
+	Title:   "Example — Golden Signals",
+	Owner:   "platform",
+	Publish: true,
+}
+
 func init() {
-	registry.Add(registry.Dashboard{
-		Meta: registry.Meta{
-			UID:     uid,
-			Title:   "Example — Golden Signals",
-			Folder:  folders.Examples,
-			Owner:   "platform",
-			Publish: true,
-		},
-		Build: build,
-	})
+	registry.Add(registry.Dashboard{Meta: meta, Build: build})
 }
 
 func build(p profile.Profile) *dashboard.DashboardBuilder {
@@ -48,7 +47,7 @@ func build(p profile.Profile) *dashboard.DashboardBuilder {
 	// checks allow — see internal/promql.
 	sel := queries.Selector{Job: "$job"}
 
-	return common.NewDashboard(p, uid, "Example — Golden Signals", "example", "golden-signals").
+	return common.NewDashboard(p, meta, "example", "golden-signals").
 		// A query variable, so the board is one board for every service rather
 		// than one board per service.
 		WithVariable(dashboard.NewQueryVariableBuilder("job").

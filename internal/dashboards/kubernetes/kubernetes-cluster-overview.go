@@ -10,7 +10,6 @@ import (
 	"github.com/grafana/grafana-foundation-sdk/go/units"
 
 	"github.com/duynhlab/obs-as-code/internal/common"
-	"github.com/duynhlab/obs-as-code/internal/folders"
 	"github.com/duynhlab/obs-as-code/internal/panels"
 	"github.com/duynhlab/obs-as-code/internal/profile"
 	queries "github.com/duynhlab/obs-as-code/internal/queries/prometheus"
@@ -26,21 +25,24 @@ const uid = "kubernetes-cluster-overview"
 // statistics for each — which is what the previous board did.
 const namespaceVar = "$namespace"
 
+// meta is declared once and used both to register the board and to build it.
+//
+// No folder: this repo emits dashboard JSON, and where a board is filed belongs
+// to the Grafana it is installed into. The GrafanaDashboard resource in homelab
+// sets spec.folder to "Platform / Infrastructure".
+var meta = registry.Meta{
+	UID:     uid,
+	Title:   "Kubernetes Cluster Overview",
+	Owner:   "platform",
+	Publish: true,
+}
+
 func init() {
-	registry.Add(registry.Dashboard{
-		Meta: registry.Meta{
-			UID:     uid,
-			Title:   "Kubernetes Cluster Overview",
-			Folder:  folders.PlatformInfrastructure,
-			Owner:   "platform",
-			Publish: true,
-		},
-		Build: build,
-	})
+	registry.Add(registry.Dashboard{Meta: meta, Build: build})
 }
 
 func build(p profile.Profile) *dashboard.DashboardBuilder {
-	return common.NewDashboard(p, uid, "Kubernetes Cluster Overview", "kubernetes", "cluster").
+	return common.NewDashboard(p, meta, "kubernetes", "cluster").
 		WithVariable(namespaceVariable(p)).
 		WithRow(dashboard.NewRowBuilder("Cluster")).
 		WithPanel(nodesReady(p)).

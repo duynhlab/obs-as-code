@@ -1,40 +1,78 @@
-# Flux wiring
+# Delivering these dashboards
 
-These manifests belong in the **homelab** repository, not here. They are kept in
-this repo so the delivery path lives beside the thing being delivered, and so a
-change to the artifact and a change to how it is consumed can be reviewed
-together.
+This repository emits **plain Grafana dashboard JSON** and nothing else. What
+consumes it is deliberately not decided here — the same file imports into a
+laptop's Grafana, Grafana Cloud, or the homelab cluster.
 
-Applying them is a separate homelab pull request.
+For homelab, the path is:
 
-## How this reaches the cluster
+    tag v*  →  release.yaml  →  ghcr.io/duynhlab/obs-as-code:v*  →  GrafanaDashboard spec.oci  →  grafana-operator  →  Grafana
 
-    tag v*  →  release.yaml  →  ghcr.io/duynhlab/obs-as-code:v*  →  OCIRepository  →  Kustomization  →  grafana-operator  →  Grafana
+The operator fetches the file from the artifact itself, so the dashboard bytes
+never enter etcd and no JSON is copied into another repository.
 
-Flux in homelab consumes **only** OCIRepositories — there is no `GitRepository`
-anywhere in that cluster — so an OCI artifact is the path that fits, not a new
-mechanism. `grafana-operator-oci` and `grafana-dashboards-chart-oci` are wired
-the same way.
+`spec.oci` requires grafana-operator **≥ 5.24.0**. The cluster runs 5.24.0.
 
-## Install
+## One resource per board
 
-Copy the two files into homelab:
+```yaml
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  name: kubernetes-cluster-overview
+  labels:
+    app.kubernetes.io/managed-by: obs-as-code
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: grafana
+  folder: "Platform / Infrastructure"
+  allowCrossNamespaceImport: true
+  resyncPeriod: 30s
+  oci:
+    reference: ghcr.io/duynhlab/obs-as-code:v0.2.0
+    path: dashboards/kubernetes-cluster-overview.json
+```
 
-| file | destination |
-|:--|:--|
-| `ocirepository.yaml` | `kubernetes/clusters/local/sources/oci/obs-as-code-oci.yaml` |
-| `kustomization.yaml` | `kubernetes/clusters/local/obs-as-code.yaml` |
+`path` must match the generated filename, which is always
+`dashboards/<uid>.json`. That coupling is deliberate: renaming a board's uid
+makes the operator's fetch **fail and say so in the resource's status**, rather
+than leaving a stale board quietly serving old panels.
 
-Then add the source to `kubernetes/clusters/local/sources/kustomization.yaml`
-and the Kustomization to the cluster's resource list.
+No `pullSecretRef`: the repository is public, so the package is too and the
+operator pulls anonymously.
 
-## Registry authentication
+## Bumping a release
 
-`duynhlab/obs-as-code` is public, and so is its GHCR package, so Flux pulls
-anonymously and no `secretRef` is needed. Generated resources carry metric
-names, PromQL and panel titles — nothing that needs protecting.
+`spec.oci.reference` takes a tag or digest — the CRD's pattern is
+`^[^:@]+(:[^:@/]+|@sha256:…)$`, so there is no semver range as Flux's
+`OCIRepository` has. Left alone, that means editing every board's resource on
+every release.
 
-If the repository is ever made private again, the package follows and this
-OCIRepository starts failing with a 401. The fix then is a
-`kubernetes.io/dockerconfigjson` secret through the ExternalSecrets/OpenBAO path
-already in the cluster, referenced from `spec.secretRef`.
+One patch in the enclosing `kustomization.yaml` avoids that, so a bump is one
+line however many boards there are:
+
+```yaml
+patches:
+  - target:
+      kind: GrafanaDashboard
+      labelSelector: app.kubernetes.io/managed-by=obs-as-code
+    patch: |
+      - op: replace
+        path: /spec/oci/reference
+        value: ghcr.io/duynhlab/obs-as-code:v0.2.0
+```
+
+Prefer a digest over a tag where reproducibility matters; the CRD accepts both.
+
+## Why not an OCIRepository
+
+An earlier version of this repo published Grafana Operator resources and had
+homelab consume them through a Flux `OCIRepository` and `Kustomization`. That
+worked, and it was the wrong shape: it made the output specific to one cluster
+running one operator, and roughly 40% of the code existed to produce manifests
+rather than dashboards.
+
+The trade is real and worth knowing. Flux no longer tracks the version — the
+reference above does — and a board's uid and its folder now live in two
+repositories with nothing binding them but the `path` coupling described above.

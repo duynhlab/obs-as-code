@@ -6,7 +6,6 @@ import (
 
 	"github.com/grafana/grafana-foundation-sdk/go/dashboard"
 
-	"github.com/duynhlab/obs-as-code/internal/folders"
 	"github.com/duynhlab/obs-as-code/internal/profile"
 	"github.com/duynhlab/obs-as-code/internal/registry"
 )
@@ -17,12 +16,13 @@ func board(uid, title string, publish bool) registry.Dashboard {
 		Meta: registry.Meta{
 			UID:     uid,
 			Title:   title,
-			Folder:  folders.Examples,
 			Owner:   "platform",
 			Publish: publish,
 		},
 		Build: func(profile.Profile) *dashboard.DashboardBuilder {
-			return dashboard.NewDashboardBuilder(title).Uid(uid)
+			return dashboard.NewDashboardBuilder(title).
+				Uid(uid).
+				Tags([]string{"owner:platform"})
 		},
 	}
 }
@@ -39,7 +39,6 @@ func TestRegistryAddRejectsBadMeta(t *testing.T) {
 		{name: "bad uid", mutate: func(d *registry.Dashboard) { d.UID = "Bad_UID" }, wantErr: "DNS-1123"},
 		{name: "empty uid", mutate: func(d *registry.Dashboard) { d.UID = "" }, wantErr: "uid is empty"},
 		{name: "empty title", mutate: func(d *registry.Dashboard) { d.Title = "  " }, wantErr: "title is empty"},
-		{name: "zero folder", mutate: func(d *registry.Dashboard) { d.Folder = folders.Folder{} }, wantErr: "uid is empty"},
 		{name: "no owner", mutate: func(d *registry.Dashboard) { d.Owner = "" }, wantErr: "owner is empty"},
 	}
 
@@ -120,7 +119,7 @@ func TestRegistryAllIsOrderedByUID(t *testing.T) {
 
 	var got []string
 	for _, r := range reg.All() {
-		got = append(got, r.Describe().UID)
+		got = append(got, r.UID)
 	}
 
 	// Map iteration order is random, so without sorting the generated output
@@ -150,28 +149,8 @@ func TestRegistryPublishedExcludesUnpublished(t *testing.T) {
 	if got, want := len(published), 1; got != want {
 		t.Fatalf("Published() has %d resources, want %d", got, want)
 	}
-	if got, want := published[0].Describe().UID, "shipped"; got != want {
+	if got, want := published[0].UID, "shipped"; got != want {
 		t.Errorf("Published()[0] = %q, want %q", got, want)
-	}
-}
-
-func TestRegistryFoldersOnlyReturnsReferencedOnes(t *testing.T) {
-	t.Parallel()
-
-	reg := registry.New()
-	if err := reg.Add(board("shipped", "Shipped", true)); err != nil {
-		t.Fatal(err)
-	}
-
-	got := reg.Folders()
-	if len(got) != 1 || got[0].UID != folders.Examples.UID {
-		t.Fatalf("Folders() = %v, want only %q", got, folders.Examples.UID)
-	}
-
-	// A folder nothing files into leaves an unexplainable empty folder in
-	// Grafana, so unreferenced declarations must not be emitted.
-	if len(folders.All()) <= len(got) {
-		t.Skip("every declared folder happens to be referenced; nothing to assert")
 	}
 }
 
@@ -179,10 +158,7 @@ func TestDashboardRenderRejectsUIDMismatch(t *testing.T) {
 	t.Parallel()
 
 	d := registry.Dashboard{
-		Meta: registry.Meta{
-			UID: "declared-uid", Title: "Mismatch",
-			Folder: folders.Examples, Owner: "platform", Publish: true,
-		},
+		Meta: registry.Meta{UID: "declared-uid", Title: "Mismatch", Owner: "platform", Publish: true},
 		Build: func(profile.Profile) *dashboard.DashboardBuilder {
 			// Different UID than declared: the board would be filed under one
 			// name and served under another.
@@ -190,12 +166,12 @@ func TestDashboardRenderRejectsUIDMismatch(t *testing.T) {
 		},
 	}
 
-	_, err := d.Render(profile.Cluster())
+	_, err := d.Model(profile.Cluster())
 	if err == nil {
-		t.Fatal("Render() = nil error, want a uid mismatch")
+		t.Fatal("Model() = nil error, want a uid mismatch")
 	}
 	if !strings.Contains(err.Error(), "they must match") {
-		t.Errorf("Render() = %v, want it to report the mismatch", err)
+		t.Errorf("Model() = %v, want it to report the mismatch", err)
 	}
 }
 
@@ -203,48 +179,69 @@ func TestDashboardRenderRejectsTitleMismatch(t *testing.T) {
 	t.Parallel()
 
 	d := registry.Dashboard{
-		Meta: registry.Meta{
-			UID: "title-drift", Title: "Declared Title",
-			Folder: folders.Examples, Owner: "platform", Publish: true,
-		},
+		Meta: registry.Meta{UID: "title-drift", Title: "Declared Title", Owner: "platform", Publish: true},
 		Build: func(profile.Profile) *dashboard.DashboardBuilder {
 			return dashboard.NewDashboardBuilder("Actual Title").Uid("title-drift")
 		},
 	}
 
-	_, err := d.Render(profile.Cluster())
+	_, err := d.Model(profile.Cluster())
 	if err == nil {
-		t.Fatal("Render() = nil error, want a title mismatch")
+		t.Fatal("Model() = nil error, want a title mismatch")
 	}
 	if !strings.Contains(err.Error(), "registration declares") {
-		t.Errorf("Render() = %v, want it to report the drift", err)
+		t.Errorf("Model() = %v, want it to report the drift", err)
 	}
 }
 
-func TestDashboardRenderProducesOneObject(t *testing.T) {
+func TestDashboardModelProducesImportableJSON(t *testing.T) {
 	t.Parallel()
 
-	objs, err := board("good-board", "Good Board", true).Render(profile.Cluster())
+	d := board("good-board", "Good Board", true)
+
+	model, err := d.Model(profile.Cluster())
 	if err != nil {
-		t.Fatalf("Render() error = %v", err)
+		t.Fatalf("Model() error = %v", err)
 	}
-	if len(objs) != 1 {
-		t.Fatalf("Render() returned %d objects, want 1", len(objs))
+	if !strings.Contains(string(model), `"uid": "good-board"`) {
+		t.Errorf("model does not carry its uid:\n%s", model)
 	}
-	if got, want := objs[0].Kind, "GrafanaDashboard"; got != want {
-		t.Errorf("Kind = %q, want %q", got, want)
+
+	// The filename is what a GrafanaDashboard's spec.oci path must name, so a
+	// change here silently breaks every resource pointing at this board.
+	if got, want := d.Filename(), "dashboards/good-board.json"; got != want {
+		t.Errorf("Filename() = %q, want %q", got, want)
 	}
-	if got, want := objs[0].Name, "good-board"; got != want {
-		t.Errorf("Name = %q, want %q", got, want)
+}
+
+func TestDashboardModelRequiresTheOwnerTag(t *testing.T) {
+	t.Parallel()
+
+	// Ownership used to live in a resource annotation. With plain JSON the tag is
+	// the only place it survives, so a board that skips common.NewDashboard must
+	// not slip through.
+	d := registry.Dashboard{
+		Meta: registry.Meta{UID: "untagged", Title: "Untagged", Owner: "platform", Publish: true},
+		Build: func(profile.Profile) *dashboard.DashboardBuilder {
+			return dashboard.NewDashboardBuilder("Untagged").Uid("untagged")
+		},
+	}
+
+	_, err := d.Model(profile.Cluster())
+	if err == nil {
+		t.Fatal("Model() = nil error, want the missing owner tag to be caught")
+	}
+	if !strings.Contains(err.Error(), "owner:platform") {
+		t.Errorf("Model() = %v, want it to name the missing tag", err)
 	}
 }
 
 func TestDashboardRenderWithoutBuildFails(t *testing.T) {
 	t.Parallel()
 
-	d := registry.Dashboard{Meta: registry.Meta{UID: "no-build", Title: "No Build", Folder: folders.Examples, Owner: "platform"}}
+	d := registry.Dashboard{Meta: registry.Meta{UID: "no-build", Title: "No Build", Owner: "platform"}}
 
-	if _, err := d.Render(profile.Cluster()); err == nil {
-		t.Fatal("Render() = nil error, want a missing-Build error")
+	if _, err := d.Model(profile.Cluster()); err == nil {
+		t.Fatal("Model() = nil error, want a missing-Build error")
 	}
 }
