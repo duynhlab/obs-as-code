@@ -51,6 +51,12 @@ func build(p profile.Profile) *dashboard.DashboardBuilder {
 		WithPanel(podsFailed(p)).
 		WithPanel(cpuRequests(p)).
 		WithPanel(memoryRequests(p)).
+		WithRow(dashboard.NewRowBuilder("Nodes")).
+		WithPanel(podsPerNode(p)).
+		WithPanel(cpuRequestsPerNode(p)).
+		WithPanel(memoryRequestsPerNode(p)).
+		WithPanel(nodePressure(p)).
+		WithPanel(nodesUnschedulable(p)).
 		WithRow(dashboard.NewRowBuilder("Workload health")).
 		WithPanel(deploymentsUnavailable(p)).
 		WithPanel(statefulSetsUnavailable(p)).
@@ -62,7 +68,15 @@ func build(p profile.Profile) *dashboard.DashboardBuilder {
 		WithPanel(containerCPU(p)).
 		WithPanel(containerMemory(p)).
 		WithPanel(cpuThrottling(p)).
-		WithPanel(network(p))
+		WithRow(dashboard.NewRowBuilder("Networking")).
+		WithPanel(network(p)).
+		WithPanel(networkDrops(p)).
+		// The per-workload and per-pod views live on their own board, mixin
+		// style, so this one stays cluster-scoped and cardinality-bounded.
+		Link(dashboard.NewDashboardLinkBuilder("Workloads drill-down").
+			Type("link").
+			Icon("dashboard").
+			Url("/d/kubernetes-workloads"))
 }
 
 // namespaceVariable is driven by exported_namespace, the label that actually
@@ -190,6 +204,60 @@ func podPhases(p profile.Profile) *timeseries.PanelBuilder {
 }
 
 // ---------------------------------------------------------------------------
+// Nodes
+//
+// KSM-only, and every description says so: this cluster has no node-exporter
+// (a documented Kind scope-out) and does not scrape /metrics/resource, so
+// there is no source of true node CPU or memory utilisation. What Kubernetes
+// *believes* about its nodes is all that can be shown honestly.
+// ---------------------------------------------------------------------------
+
+func podsPerNode(p profile.Profile) *timeseries.PanelBuilder {
+	return panels.Timeseries(p, "Pods per Node", queries.PodsPerNode(), "{{node}}").
+		WithTarget(panels.Target(p, queries.PodCapacityPerNode(), "capacity {{node}}")).
+		Description("Scheduled pods against each node's allocatable pod slots.").
+		Unit(units.Short).
+		Span(8).Height(8)
+}
+
+func cpuRequestsPerNode(p profile.Profile) *timeseries.PanelBuilder {
+	return panels.Timeseries(p, "CPU Requests vs Allocatable by Node", queries.CPURequestsVsAllocatableByNode(), "{{node}}").
+		Description("Fraction of each node's allocatable CPU claimed by running pods' requests. The per-node view is the honest one here: Kind nodes share one host, and the scheduler decides per node." + " No true node utilisation exists on this cluster — no node-exporter, by documented scope-out.").
+		Unit(units.PercentUnit).
+		Min(0).
+		Thresholds(panels.Thresholds("green",
+			panels.ThresholdStep{At: 0.7, Color: "yellow"},
+			panels.ThresholdStep{At: 0.85, Color: "red"})).
+		Span(8).Height(8)
+}
+
+func memoryRequestsPerNode(p profile.Profile) *timeseries.PanelBuilder {
+	return panels.Timeseries(p, "Memory Requests vs Allocatable by Node", queries.MemoryRequestsVsAllocatableByNode(), "{{node}}").
+		Description("Memory equivalent of the CPU panel beside it, with the same caveat: scheduling headroom, not physical headroom.").
+		Unit(units.PercentUnit).
+		Min(0).
+		Thresholds(panels.Thresholds("green",
+			panels.ThresholdStep{At: 0.7, Color: "yellow"},
+			panels.ThresholdStep{At: 0.85, Color: "red"})).
+		Span(8).Height(8)
+}
+
+func nodePressure(p profile.Profile) *timeseries.PanelBuilder {
+	return panels.Timeseries(p, "Node Pressure Conditions", queries.NodePressure(), "{{node}} · {{condition}}").
+		Description("Memory, disk and PID pressure conditions currently true, by node. Flat at zero is the healthy state.").
+		Unit(units.Short).
+		Span(18).Height(6)
+}
+
+func nodesUnschedulable(p profile.Profile) *stat.PanelBuilder {
+	return panels.Stat(p, "Nodes Unschedulable", queries.NodesUnschedulable(), "Cordoned").
+		Description("Cordoned nodes. The series is one 0/1 gauge per node and always present, so this reads 0 with no anchor needed.").
+		Unit(units.Short).
+		Thresholds(panels.Thresholds("green", panels.ThresholdStep{At: 1, Color: "yellow"})).
+		Span(6).Height(6)
+}
+
+// ---------------------------------------------------------------------------
 // Resource usage
 // ---------------------------------------------------------------------------
 
@@ -198,7 +266,7 @@ func containerCPU(p profile.Profile) *timeseries.PanelBuilder {
 		Description("CPU cores consumed, from cAdvisor. 1 means one core fully used.").
 		Unit(units.Short).
 		Stacking(sdkcommon.NewStackingConfigBuilder().Mode(sdkcommon.StackingModeNormal)).
-		Span(12).Height(8)
+		Span(8).Height(8)
 }
 
 func containerMemory(p profile.Profile) *timeseries.PanelBuilder {
@@ -206,7 +274,7 @@ func containerMemory(p profile.Profile) *timeseries.PanelBuilder {
 		Description("Working-set memory, which is the figure the kernel's OOM killer acts on — so it is the figure that predicts a kill.").
 		Unit(units.BytesSI).
 		Stacking(sdkcommon.NewStackingConfigBuilder().Mode(sdkcommon.StackingModeNormal)).
-		Span(12).Height(8)
+		Span(8).Height(8)
 }
 
 func cpuThrottling(p profile.Profile) *timeseries.PanelBuilder {
@@ -217,7 +285,7 @@ func cpuThrottling(p profile.Profile) *timeseries.PanelBuilder {
 		Thresholds(panels.Thresholds("green",
 			panels.ThresholdStep{At: 0.25, Color: "yellow"},
 			panels.ThresholdStep{At: 0.5, Color: "red"})).
-		Span(12).Height(8)
+		Span(8).Height(8)
 }
 
 func network(p profile.Profile) *timeseries.PanelBuilder {
@@ -234,6 +302,17 @@ func network(p profile.Profile) *timeseries.PanelBuilder {
 				// this is the documented escape hatch rather than a workaround.
 				{Id: "custom.transform", Value: "negative-Y"},
 			}).
+		Span(12).Height(8)
+}
+
+func networkDrops(p profile.Profile) *timeseries.PanelBuilder {
+	return panels.Timeseries(p, "Packets Dropped by Namespace", queries.ContainerNetworkReceiveDropsByNamespace(namespaceVar), "RX {{namespace}}").
+		WithTarget(panels.Target(p, queries.ContainerNetworkTransmitDropsByNamespace(namespaceVar), "TX {{namespace}}")).
+		Description("Packets dropped per second — queueing or conntrack pressure that the bandwidth panel hides. Transmit is drawn below the axis, matching the I/O panel.").
+		Unit(units.Short).
+		WithOverride(
+			dashboard.MatcherConfig{Id: "byRegexp", Options: "TX.*"},
+			[]dashboard.DynamicConfigValue{{Id: "custom.transform", Value: "negative-Y"}}).
 		Span(12).Height(8)
 }
 

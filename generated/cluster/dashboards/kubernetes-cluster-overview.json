@@ -408,12 +408,349 @@
     {
       "type": "row",
       "collapsed": false,
-      "title": "Workload health",
+      "title": "Nodes",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
         "y": 5
+      },
+      "id": 0,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          },
+          "expr": "count by (node) (kube_pod_info{job=\"kube-state-metrics\"})",
+          "instant": false,
+          "legendFormat": "{{node}}",
+          "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          },
+          "expr": "sum by (node) (kube_node_status_allocatable{job=\"kube-state-metrics\",resource=\"pods\"})",
+          "instant": false,
+          "legendFormat": "capacity {{node}}",
+          "range": true
+        }
+      ],
+      "title": "Pods per Node",
+      "description": "Scheduled pods against each node's allocatable pod slots.",
+      "transparent": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 6
+      },
+      "repeatDirection": "h",
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "gradientMode": "none",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          },
+          "expr": "sum by (node) (kube_pod_container_resource_requests{job=\"kube-state-metrics\",resource=\"cpu\"} * on (exported_namespace, exported_pod) group_left () (max by (exported_namespace, exported_pod) (kube_pod_status_phase{job=\"kube-state-metrics\",phase=\"Running\"}) == 1)) / (sum by (node) (kube_node_status_allocatable{job=\"kube-state-metrics\",resource=\"cpu\"}) \u003e 0)",
+          "instant": false,
+          "legendFormat": "{{node}}",
+          "range": true
+        }
+      ],
+      "title": "CPU Requests vs Allocatable by Node",
+      "description": "Fraction of each node's allocatable CPU claimed by running pods' requests. The per-node view is the honest one here: Kind nodes share one host, and the scheduler decides per node. No true node utilisation exists on this cluster — no node-exporter, by documented scope-out.",
+      "transparent": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 6
+      },
+      "repeatDirection": "h",
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 0.7,
+                "color": "yellow"
+              },
+              {
+                "value": 0.85,
+                "color": "red"
+              }
+            ]
+          },
+          "custom": {
+            "gradientMode": "none",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          },
+          "expr": "sum by (node) (kube_pod_container_resource_requests{job=\"kube-state-metrics\",resource=\"memory\"} * on (exported_namespace, exported_pod) group_left () (max by (exported_namespace, exported_pod) (kube_pod_status_phase{job=\"kube-state-metrics\",phase=\"Running\"}) == 1)) / (sum by (node) (kube_node_status_allocatable{job=\"kube-state-metrics\",resource=\"memory\"}) \u003e 0)",
+          "instant": false,
+          "legendFormat": "{{node}}",
+          "range": true
+        }
+      ],
+      "title": "Memory Requests vs Allocatable by Node",
+      "description": "Memory equivalent of the CPU panel beside it, with the same caveat: scheduling headroom, not physical headroom.",
+      "transparent": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 6
+      },
+      "repeatDirection": "h",
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 0.7,
+                "color": "yellow"
+              },
+              {
+                "value": 0.85,
+                "color": "red"
+              }
+            ]
+          },
+          "custom": {
+            "gradientMode": "none",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          },
+          "expr": "sum by (node, condition) (kube_node_status_condition{job=\"kube-state-metrics\",condition=~\"MemoryPressure|DiskPressure|PIDPressure\",status=\"true\"})",
+          "instant": false,
+          "legendFormat": "{{node}} · {{condition}}",
+          "range": true
+        }
+      ],
+      "title": "Node Pressure Conditions",
+      "description": "Memory, disk and PID pressure conditions currently true, by node. Flat at zero is the healthy state.",
+      "transparent": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 18,
+        "x": 0,
+        "y": 14
+      },
+      "repeatDirection": "h",
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "gradientMode": "none",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          },
+          "expr": "sum(kube_node_spec_unschedulable{job=\"kube-state-metrics\"})",
+          "instant": false,
+          "legendFormat": "Cordoned",
+          "range": true
+        }
+      ],
+      "title": "Nodes Unschedulable",
+      "description": "Cordoned nodes. The series is one 0/1 gauge per node and always present, so this reads 0 with no anchor needed.",
+      "transparent": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 18,
+        "y": 14
+      },
+      "repeatDirection": "h",
+      "options": {
+        "graphMode": "area",
+        "colorMode": "value",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "percentChangeColorMode": "standard",
+        "orientation": ""
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "yellow"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "row",
+      "collapsed": false,
+      "title": "Workload health",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 20
       },
       "id": 0,
       "panels": []
@@ -443,7 +780,7 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 6
+        "y": 21
       },
       "repeatDirection": "h",
       "options": {
@@ -507,7 +844,7 @@
         "h": 4,
         "w": 6,
         "x": 6,
-        "y": 6
+        "y": 21
       },
       "repeatDirection": "h",
       "options": {
@@ -571,7 +908,7 @@
         "h": 4,
         "w": 6,
         "x": 12,
-        "y": 6
+        "y": 21
       },
       "repeatDirection": "h",
       "options": {
@@ -635,7 +972,7 @@
         "h": 4,
         "w": 6,
         "x": 18,
-        "y": 6
+        "y": 21
       },
       "repeatDirection": "h",
       "options": {
@@ -699,7 +1036,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 10
+        "y": 25
       },
       "repeatDirection": "h",
       "options": {
@@ -752,7 +1089,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 10
+        "y": 25
       },
       "repeatDirection": "h",
       "options": {
@@ -792,7 +1129,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 18
+        "y": 33
       },
       "id": 0,
       "panels": []
@@ -820,9 +1157,9 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 8,
         "x": 0,
-        "y": 19
+        "y": 34
       },
       "repeatDirection": "h",
       "options": {
@@ -877,9 +1214,9 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 19
+        "w": 8,
+        "x": 8,
+        "y": 34
       },
       "repeatDirection": "h",
       "options": {
@@ -934,9 +1271,9 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 27
+        "w": 8,
+        "x": 16,
+        "y": 34
       },
       "repeatDirection": "h",
       "options": {
@@ -983,6 +1320,19 @@
       }
     },
     {
+      "type": "row",
+      "collapsed": false,
+      "title": "Networking",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 42
+      },
+      "id": 0,
+      "panels": []
+    },
+    {
       "type": "timeseries",
       "targets": [
         {
@@ -1016,8 +1366,8 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 12,
-        "y": 27
+        "x": 0,
+        "y": 43
       },
       "repeatDirection": "h",
       "options": {
@@ -1035,6 +1385,83 @@
       "fieldConfig": {
         "defaults": {
           "unit": "Bps",
+          "min": 0,
+          "custom": {
+            "gradientMode": "none",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "TX.*"
+            },
+            "properties": [
+              {
+                "id": "custom.transform",
+                "value": "negative-Y"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          },
+          "expr": "sum by (namespace) (rate(container_network_receive_packets_dropped_total{job=\"kubelet\",namespace=~\"$namespace\",namespace!=\"\"}[$__rate_interval]))",
+          "instant": false,
+          "legendFormat": "RX {{namespace}}",
+          "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          },
+          "expr": "sum by (namespace) (rate(container_network_transmit_packets_dropped_total{job=\"kubelet\",namespace=~\"$namespace\",namespace!=\"\"}[$__rate_interval]))",
+          "instant": false,
+          "legendFormat": "TX {{namespace}}",
+          "range": true
+        }
+      ],
+      "title": "Packets Dropped by Namespace",
+      "description": "Packets dropped per second — queueing or conntrack pressure that the bandwidth panel hides. Transmit is drawn below the axis, matching the I/O panel.",
+      "transparent": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 43
+      },
+      "repeatDirection": "h",
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
           "min": 0,
           "custom": {
             "gradientMode": "none",
@@ -1112,6 +1539,19 @@
       "asDropdown": false,
       "placement": "inControlsMenu",
       "targetBlank": true,
+      "includeVars": false,
+      "keepTime": false
+    },
+    {
+      "title": "Workloads drill-down",
+      "type": "link",
+      "icon": "dashboard",
+      "tooltip": "",
+      "url": "/d/kubernetes-workloads",
+      "tags": [],
+      "asDropdown": false,
+      "placement": "inControlsMenu",
+      "targetBlank": false,
       "includeVars": false,
       "keepTime": false
     }
