@@ -302,3 +302,97 @@ func matchers(job, namespaceLabel, namespace string, extra ...string) string {
 func namespaceLabel(expr string) string {
 	return fmt.Sprintf(`label_replace(%s, "namespace", "$1", %q, "(.*)")`, expr, ksmNamespace)
 }
+
+// ---------------------------------------------------------------------------
+// Nodes (kube-state-metrics only — this cluster has no node-exporter and does
+// not scrape /metrics/resource, so there is no source of true node CPU or
+// memory utilisation. Everything below is Kubernetes state, and the panels say
+// so rather than pretending otherwise.)
+// ---------------------------------------------------------------------------
+
+// NodesUnschedulable counts cordoned nodes. The series is one 0/1 gauge per
+// node and always present, so the sum reads 0 with no anchor needed.
+func NodesUnschedulable() string {
+	return fmt.Sprintf(`sum(kube_node_spec_unschedulable{job=%q})`, jobKubeStateMetrics)
+}
+
+// NodePressure is the pressure conditions currently true, by node and
+// condition. Empty means no pressure, which is the healthy state; the panel
+// shows lines at zero via the always-present Ready condition being excluded.
+func NodePressure() string {
+	return fmt.Sprintf(
+		`sum by (node, condition) (kube_node_status_condition{job=%q,condition=~"MemoryPressure|DiskPressure|PIDPressure",status="true"})`,
+		jobKubeStateMetrics)
+}
+
+// PodsPerNode counts scheduled pods by node.
+//
+// kube_pod_info's `node` label survives un-renamed — node is not a scrape
+// target label, so the honorLabels rename does not touch it.
+func PodsPerNode() string {
+	return fmt.Sprintf(`count by (node) (kube_pod_info{job=%q})`, jobKubeStateMetrics)
+}
+
+// PodCapacityPerNode is each node's allocatable pod slots.
+func PodCapacityPerNode() string {
+	return fmt.Sprintf(`sum by (node) (kube_node_status_allocatable{job=%q,resource="pods"})`, jobKubeStateMetrics)
+}
+
+// CPURequestsVsAllocatableByNode is the per-node counterpart of
+// CPURequestsVsAllocatable: the fraction of each node's allocatable CPU already
+// claimed by running pods' requests.
+//
+// On this cluster the per-node view is the one that is honest: the cluster-wide
+// sum reports the shared host's capacity once per Kind node, while the
+// scheduler genuinely decides per node — which is what this measures.
+func CPURequestsVsAllocatableByNode() string {
+	return requestsVsAllocatableByNode("cpu")
+}
+
+// MemoryRequestsVsAllocatableByNode is the memory equivalent.
+func MemoryRequestsVsAllocatableByNode() string {
+	return requestsVsAllocatableByNode("memory")
+}
+
+func requestsVsAllocatableByNode(resource string) string {
+	// kube_pod_container_resource_requests carries a `node` label natively, so
+	// no join is needed to attribute a request to its node. The running-pods
+	// join is the same correction as the cluster gauges: requests are emitted
+	// for Pending, Succeeded and Failed pods too.
+	running := fmt.Sprintf(
+		`max by (%[1]s, %[2]s) (kube_pod_status_phase{job=%[3]q,phase="Running"}) == 1`,
+		ksmNamespace, ksmPod, jobKubeStateMetrics)
+
+	requests := fmt.Sprintf(
+		`sum by (node) (kube_pod_container_resource_requests{job=%[1]q,resource=%[2]q} * on (%[3]s, %[4]s) group_left () (%[5]s))`,
+		jobKubeStateMetrics, resource, ksmNamespace, ksmPod, running)
+
+	allocatable := fmt.Sprintf(
+		`sum by (node) (kube_node_status_allocatable{job=%q,resource=%q})`,
+		jobKubeStateMetrics, resource)
+
+	return fmt.Sprintf(`%s / (%s > 0)`, requests, allocatable)
+}
+
+// ---------------------------------------------------------------------------
+// Networking (cAdvisor)
+// ---------------------------------------------------------------------------
+
+// ContainerNetworkReceiveDropsByNamespace is inbound packets dropped per
+// second, by namespace. A sustained non-zero here is queueing or conntrack
+// pressure that bandwidth panels hide.
+func ContainerNetworkReceiveDropsByNamespace(namespace string) string {
+	return containerNetworkDropsByNamespace("receive", namespace)
+}
+
+// ContainerNetworkTransmitDropsByNamespace is the outbound equivalent.
+func ContainerNetworkTransmitDropsByNamespace(namespace string) string {
+	return containerNetworkDropsByNamespace("transmit", namespace)
+}
+
+func containerNetworkDropsByNamespace(direction, namespace string) string {
+	return fmt.Sprintf(
+		`sum by (%s) (rate(container_network_%s_packets_dropped_total%s[%s]))`,
+		cadvisorNamespace, direction,
+		cadvisorMatchers(namespace, `namespace!=""`), rateInterval)
+}
