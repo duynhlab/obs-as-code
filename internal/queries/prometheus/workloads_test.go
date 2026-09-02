@@ -16,6 +16,19 @@ var wsel = queries.WorkloadSelector{
 	Workload:     "$workload",
 }
 
+func TestWorkloadSelectorRejectsEmptyNamespace(t *testing.T) {
+	t.Parallel()
+	if err := (queries.WorkloadSelector{}).Validate(); err == nil {
+		t.Fatal("Validate() accepted an unscoped workload selector")
+	}
+	defer func() {
+		if recover() == nil {
+			t.Fatal("CPUByWorkload() did not panic for an unsafe selector")
+		}
+	}()
+	queries.CPUByWorkload(queries.WorkloadSelector{})
+}
+
 func workloadQueries() map[string]string {
 	return map[string]string{
 		"CPUByWorkload":        queries.CPUByWorkload(wsel),

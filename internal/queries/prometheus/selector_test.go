@@ -43,11 +43,6 @@ func TestSelectorMatchers(t *testing.T) {
 			additional: []string{`http_response_status_code=~"5.."`},
 			want:       `{job=~"$job",http_response_status_code=~"5.."}`,
 		},
-		{
-			name:     "empty selector renders nothing",
-			selector: queries.Selector{},
-			want:     ``,
-		},
 	}
 
 	for _, tt := range tests {
@@ -59,6 +54,16 @@ func TestSelectorMatchers(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSelectorMatchersRejectsUnsafeSelector(t *testing.T) {
+	t.Parallel()
+	defer func() {
+		if recover() == nil {
+			t.Fatal("Matchers() did not panic for an unscoped selector")
+		}
+	}()
+	queries.Selector{}.Matchers()
 }
 
 func TestSelectorMatchersIsStable(t *testing.T) {

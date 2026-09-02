@@ -1,858 +1,1231 @@
 {
-  "uid": "kubernetes-workloads",
-  "title": "Kubernetes Workloads",
-  "tags": [
-    "obs-as-code",
-    "owner:platform",
-    "kubernetes",
-    "workloads"
-  ],
-  "timezone": "browser",
-  "editable": true,
-  "graphTooltip": 1,
-  "time": {
-    "from": "now-6h",
-    "to": "now"
+  "apiVersion": "dashboard.grafana.app/v2",
+  "kind": "Dashboard",
+  "metadata": {
+    "name": "kubernetes-workloads"
   },
-  "timepicker": {
-    "hidden": false,
-    "refresh_intervals": [
-      "30s",
-      "1m",
-      "5m",
-      "15m",
-      "1h"
-    ]
-  },
-  "fiscalYearStartMonth": 0,
-  "refresh": "1m",
-  "schemaVersion": 42,
-  "panels": [
-    {
-      "type": "row",
-      "collapsed": false,
-      "title": "Workloads in $namespace",
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 0
-      },
-      "id": 0,
-      "panels": []
-    },
-    {
-      "type": "timeseries",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${ds}"
+  "spec": {
+    "annotations": [],
+    "cursorSync": "Crosshair",
+    "editable": true,
+    "elements": {
+      "cpu-by-pod": {
+        "kind": "Panel",
+        "spec": {
+          "id": 4,
+          "title": "CPU by Pod",
+          "description": "",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "spec": {
+                        "expr": "sum by (pod) (sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{job=\"kubelet\",namespace=~\"$namespace\",container!=\"\",image!=\"\"}[$__rate_interval])) * on (namespace, pod) group_left () (namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\",workload=~\"$workload\"}))",
+                        "legendFormat": "{{pod}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "query-0",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
           },
-          "expr": "sum by (workload, workload_type) (sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{job=\"kubelet\",namespace=~\"$namespace\",container!=\"\",image!=\"\"}[$__rate_interval])) * on (namespace, pod) group_left (workload, workload_type) (namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\",workload=~\"$workload\"}))",
-          "instant": false,
-          "legendFormat": "{{workload_type}}/{{workload}}",
-          "range": true
-        }
-      ],
-      "title": "CPU by Workload",
-      "description": "CPU cores consumed, attributed to the owning Deployment, StatefulSet, DaemonSet or Job through the ownership recording rule.",
-      "transparent": false,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${ds}"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 0,
-        "y": 1
-      },
-      "repeatDirection": "h",
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": []
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "min": 0,
-          "custom": {
-            "gradientMode": "none",
-            "lineWidth": 1,
-            "fillOpacity": 8,
-            "showPoints": "never",
-            "stacking": {
-              "mode": "normal"
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "short",
+                  "custom": {
+                    "gradientMode": "none",
+                    "lineWidth": 1,
+                    "fillOpacity": 8,
+                    "showPoints": "never"
+                  }
+                },
+                "overrides": []
+              }
             }
           }
-        },
-        "overrides": []
-      }
-    },
-    {
-      "type": "timeseries",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${ds}"
+        }
+      },
+      "cpu-by-workload": {
+        "kind": "Panel",
+        "spec": {
+          "id": 1,
+          "title": "CPU by Workload",
+          "description": "CPU cores consumed, attributed to the owning Deployment, StatefulSet, DaemonSet or Job through the ownership recording rule.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "spec": {
+                        "expr": "sum by (workload, workload_type) (sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{job=\"kubelet\",namespace=~\"$namespace\",container!=\"\",image!=\"\"}[$__rate_interval])) * on (namespace, pod) group_left (workload, workload_type) (namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\",workload=~\"$workload\"}))",
+                        "legendFormat": "{{workload_type}}/{{workload}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "query-0",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
           },
-          "expr": "sum by (workload, workload_type) (sum by (namespace, pod) (container_memory_working_set_bytes{job=\"kubelet\",namespace=~\"$namespace\",container!=\"\",image!=\"\"}) * on (namespace, pod) group_left (workload, workload_type) (namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\",workload=~\"$workload\"}))",
-          "instant": false,
-          "legendFormat": "{{workload_type}}/{{workload}}",
-          "range": true
-        }
-      ],
-      "title": "Memory by Workload",
-      "description": "Working-set memory by workload — the figure the OOM killer acts on.",
-      "transparent": false,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${ds}"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 8,
-        "y": 1
-      },
-      "repeatDirection": "h",
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": []
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "decbytes",
-          "min": 0,
-          "custom": {
-            "gradientMode": "none",
-            "lineWidth": 1,
-            "fillOpacity": 8,
-            "showPoints": "never",
-            "stacking": {
-              "mode": "normal"
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "short",
+                  "custom": {
+                    "gradientMode": "none",
+                    "lineWidth": 1,
+                    "fillOpacity": 8,
+                    "showPoints": "never",
+                    "stacking": {
+                      "mode": "normal"
+                    }
+                  }
+                },
+                "overrides": []
+              }
             }
           }
-        },
-        "overrides": []
-      }
-    },
-    {
-      "type": "timeseries",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${ds}"
+        }
+      },
+      "cpu-throttling": {
+        "kind": "Panel",
+        "spec": {
+          "id": 6,
+          "title": "CPU Throttling by Pod",
+          "description": "Fraction of CFS periods throttled, for the selected workload's pods. Healthy pods stay visible at zero rather than being filtered away.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "spec": {
+                        "expr": "sum by (pod) (rate(container_cpu_cfs_throttled_periods_total{job=\"kubelet\",namespace=~\"$namespace\",container!=\"\"}[$__rate_interval]) * on (namespace, pod) group_left () (namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\",workload=~\"$workload\"})) / clamp_min(sum by (pod) (rate(container_cpu_cfs_periods_total{job=\"kubelet\",namespace=~\"$namespace\",container!=\"\"}[$__rate_interval]) * on (namespace, pod) group_left () (namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\",workload=~\"$workload\"})), 1)",
+                        "legendFormat": "{{pod}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "query-0",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
           },
-          "expr": "sum by (workload, workload_type) (sum by (namespace, pod) (label_replace(label_replace(rate(kube_pod_container_status_restarts_total{job=\"kube-state-metrics\",exported_namespace=~\"$namespace\"}[$__rate_interval]), \"namespace\", \"$1\", \"exported_namespace\", \"(.+)\"), \"pod\", \"$1\", \"exported_pod\", \"(.+)\")) * on (namespace, pod) group_left (workload, workload_type) (namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\",workload=~\"$workload\"}))",
-          "instant": false,
-          "legendFormat": "{{workload_type}}/{{workload}}",
-          "range": true
-        }
-      ],
-      "title": "Restarts by Workload",
-      "description": "Container restarts per second, attributed to the owning workload.",
-      "transparent": false,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${ds}"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 1
-      },
-      "repeatDirection": "h",
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": []
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "min": 0,
-          "custom": {
-            "gradientMode": "none",
-            "lineWidth": 1,
-            "fillOpacity": 8,
-            "showPoints": "never"
-          }
-        },
-        "overrides": []
-      }
-    },
-    {
-      "type": "row",
-      "collapsed": false,
-      "title": "CPU",
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 9
-      },
-      "id": 0,
-      "panels": []
-    },
-    {
-      "type": "timeseries",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${ds}"
-          },
-          "expr": "sum by (pod) (sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{job=\"kubelet\",namespace=~\"$namespace\",container!=\"\",image!=\"\"}[$__rate_interval])) * on (namespace, pod) group_left () (namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\",workload=~\"$workload\"}))",
-          "instant": false,
-          "legendFormat": "{{pod}}",
-          "range": true
-        }
-      ],
-      "title": "CPU by Pod",
-      "transparent": false,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${ds}"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 0,
-        "y": 10
-      },
-      "repeatDirection": "h",
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": []
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "min": 0,
-          "custom": {
-            "gradientMode": "none",
-            "lineWidth": 1,
-            "fillOpacity": 8,
-            "showPoints": "never"
-          }
-        },
-        "overrides": []
-      }
-    },
-    {
-      "type": "timeseries",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${ds}"
-          },
-          "expr": "sum by (pod) (sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{job=\"kubelet\",namespace=~\"$namespace\",container!=\"\",image!=\"\"}[$__rate_interval])) * on (namespace, pod) group_left () (namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\",workload=~\"$workload\"})) / (sum by (pod) (label_replace(label_replace(kube_pod_container_resource_requests{job=\"kube-state-metrics\",exported_namespace=~\"$namespace\",resource=\"cpu\"}, \"namespace\", \"$1\", \"exported_namespace\", \"(.+)\"), \"pod\", \"$1\", \"exported_pod\", \"(.+)\") * on (namespace, pod) group_left () (namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\",workload=~\"$workload\"})) \u003e 0)",
-          "instant": false,
-          "legendFormat": "{{pod}}",
-          "range": true
-        }
-      ],
-      "title": "CPU Usage vs Requests by Pod",
-      "description": "Usage as a fraction of requests. Above 1 is legitimate burst; sustained far below 1 is over-provisioning that inflates the scheduling gauges on the overview.",
-      "transparent": false,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${ds}"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 8,
-        "y": 10
-      },
-      "repeatDirection": "h",
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": []
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percentunit",
-          "min": 0,
-          "custom": {
-            "gradientMode": "none",
-            "lineWidth": 1,
-            "fillOpacity": 8,
-            "showPoints": "never"
-          }
-        },
-        "overrides": []
-      }
-    },
-    {
-      "type": "timeseries",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${ds}"
-          },
-          "expr": "sum by (pod) (rate(container_cpu_cfs_throttled_periods_total{job=\"kubelet\",namespace=~\"$namespace\",container!=\"\"}[$__rate_interval]) * on (namespace, pod) group_left () (namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\",workload=~\"$workload\"})) / clamp_min(sum by (pod) (rate(container_cpu_cfs_periods_total{job=\"kubelet\",namespace=~\"$namespace\",container!=\"\"}[$__rate_interval]) * on (namespace, pod) group_left () (namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\",workload=~\"$workload\"})), 1)",
-          "instant": false,
-          "legendFormat": "{{pod}}",
-          "range": true
-        }
-      ],
-      "title": "CPU Throttling by Pod",
-      "description": "Fraction of CFS periods throttled, for the selected workload's pods. Healthy pods stay visible at zero rather than being filtered away.",
-      "transparent": false,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${ds}"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 10
-      },
-      "repeatDirection": "h",
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": []
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percentunit",
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "value": null,
-                "color": "green"
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
               },
-              {
-                "value": 0.25,
-                "color": "yellow"
-              },
-              {
-                "value": 0.5,
-                "color": "red"
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "percentunit",
+                  "min": 0,
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": null,
+                        "color": "green"
+                      },
+                      {
+                        "value": 0.25,
+                        "color": "yellow"
+                      },
+                      {
+                        "value": 0.5,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "custom": {
+                    "gradientMode": "none",
+                    "lineWidth": 1,
+                    "fillOpacity": 8,
+                    "showPoints": "never"
+                  }
+                },
+                "overrides": []
               }
-            ]
-          },
-          "custom": {
-            "gradientMode": "none",
-            "lineWidth": 1,
-            "fillOpacity": 8,
-            "showPoints": "never"
+            }
           }
-        },
-        "overrides": []
-      }
-    },
-    {
-      "type": "row",
-      "collapsed": false,
-      "title": "Memory",
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 18
+        }
       },
-      "id": 0,
-      "panels": []
-    },
-    {
-      "type": "timeseries",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${ds}"
+      "cpu-vs-requests": {
+        "kind": "Panel",
+        "spec": {
+          "id": 5,
+          "title": "CPU Usage vs Requests by Pod",
+          "description": "Usage as a fraction of requests. Above 1 is legitimate burst; sustained far below 1 is over-provisioning that inflates the scheduling gauges on the overview.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "spec": {
+                        "expr": "sum by (pod) (sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{job=\"kubelet\",namespace=~\"$namespace\",container!=\"\",image!=\"\"}[$__rate_interval])) * on (namespace, pod) group_left () (namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\",workload=~\"$workload\"})) / (sum by (pod) (label_replace(label_replace(kube_pod_container_resource_requests{job=\"kube-state-metrics\",exported_namespace=~\"$namespace\",resource=\"cpu\"}, \"namespace\", \"$1\", \"exported_namespace\", \"(.+)\"), \"pod\", \"$1\", \"exported_pod\", \"(.+)\") * on (namespace, pod) group_left () (namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\",workload=~\"$workload\"})) \u003e 0)",
+                        "legendFormat": "{{pod}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "query-0",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
           },
-          "expr": "sum by (pod) (sum by (namespace, pod) (container_memory_working_set_bytes{job=\"kubelet\",namespace=~\"$namespace\",container!=\"\",image!=\"\"}) * on (namespace, pod) group_left () (namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\",workload=~\"$workload\"}))",
-          "instant": false,
-          "legendFormat": "{{pod}}",
-          "range": true
-        }
-      ],
-      "title": "Memory by Pod",
-      "transparent": false,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${ds}"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 19
-      },
-      "repeatDirection": "h",
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": []
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "decbytes",
-          "min": 0,
-          "custom": {
-            "gradientMode": "none",
-            "lineWidth": 1,
-            "fillOpacity": 8,
-            "showPoints": "never"
-          }
-        },
-        "overrides": []
-      }
-    },
-    {
-      "type": "timeseries",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${ds}"
-          },
-          "expr": "sum by (pod) (sum by (namespace, pod) (container_memory_working_set_bytes{job=\"kubelet\",namespace=~\"$namespace\",container!=\"\",image!=\"\"}) * on (namespace, pod) group_left () (namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\",workload=~\"$workload\"})) / (sum by (pod) (label_replace(label_replace(kube_pod_container_resource_limits{job=\"kube-state-metrics\",exported_namespace=~\"$namespace\",resource=\"memory\"}, \"namespace\", \"$1\", \"exported_namespace\", \"(.+)\"), \"pod\", \"$1\", \"exported_pod\", \"(.+)\") * on (namespace, pod) group_left () (namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\",workload=~\"$workload\"})) \u003e 0)",
-          "instant": false,
-          "legendFormat": "{{pod}}",
-          "range": true
-        }
-      ],
-      "title": "Memory Usage vs Limits by Pod",
-      "description": "Working set as a fraction of the memory limit — 1.0 is where the OOM killer lives. Same join shape as homelab's KubePodMemoryNearLimit alert, so the panel and the page agree.",
-      "transparent": false,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${ds}"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 19
-      },
-      "repeatDirection": "h",
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": []
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percentunit",
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "value": null,
-                "color": "green"
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
               },
-              {
-                "value": 0.8,
-                "color": "yellow"
-              },
-              {
-                "value": 0.9,
-                "color": "red"
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "percentunit",
+                  "min": 0,
+                  "custom": {
+                    "gradientMode": "none",
+                    "lineWidth": 1,
+                    "fillOpacity": 8,
+                    "showPoints": "never"
+                  }
+                },
+                "overrides": []
               }
-            ]
-          },
-          "custom": {
-            "gradientMode": "none",
-            "lineWidth": 1,
-            "fillOpacity": 8,
-            "showPoints": "never"
+            }
           }
-        },
-        "overrides": []
+        }
+      },
+      "memory-by-pod": {
+        "kind": "Panel",
+        "spec": {
+          "id": 7,
+          "title": "Memory by Pod",
+          "description": "",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "spec": {
+                        "expr": "sum by (pod) (sum by (namespace, pod) (container_memory_working_set_bytes{job=\"kubelet\",namespace=~\"$namespace\",container!=\"\",image!=\"\"}) * on (namespace, pod) group_left () (namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\",workload=~\"$workload\"}))",
+                        "legendFormat": "{{pod}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "query-0",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "decbytes",
+                  "custom": {
+                    "gradientMode": "none",
+                    "lineWidth": 1,
+                    "fillOpacity": 8,
+                    "showPoints": "never"
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "memory-by-workload": {
+        "kind": "Panel",
+        "spec": {
+          "id": 2,
+          "title": "Memory by Workload",
+          "description": "Working-set memory by workload — the figure the OOM killer acts on.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "spec": {
+                        "expr": "sum by (workload, workload_type) (sum by (namespace, pod) (container_memory_working_set_bytes{job=\"kubelet\",namespace=~\"$namespace\",container!=\"\",image!=\"\"}) * on (namespace, pod) group_left (workload, workload_type) (namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\",workload=~\"$workload\"}))",
+                        "legendFormat": "{{workload_type}}/{{workload}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "query-0",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "decbytes",
+                  "custom": {
+                    "gradientMode": "none",
+                    "lineWidth": 1,
+                    "fillOpacity": 8,
+                    "showPoints": "never",
+                    "stacking": {
+                      "mode": "normal"
+                    }
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "memory-vs-limits": {
+        "kind": "Panel",
+        "spec": {
+          "id": 8,
+          "title": "Memory Usage vs Limits by Pod",
+          "description": "Working set as a fraction of the memory limit — 1.0 is where the OOM killer lives. Same join shape as homelab's KubePodMemoryNearLimit alert, so the panel and the page agree.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "spec": {
+                        "expr": "sum by (pod) (sum by (namespace, pod) (container_memory_working_set_bytes{job=\"kubelet\",namespace=~\"$namespace\",container!=\"\",image!=\"\"}) * on (namespace, pod) group_left () (namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\",workload=~\"$workload\"})) / (sum by (pod) (label_replace(label_replace(kube_pod_container_resource_limits{job=\"kube-state-metrics\",exported_namespace=~\"$namespace\",resource=\"memory\"}, \"namespace\", \"$1\", \"exported_namespace\", \"(.+)\"), \"pod\", \"$1\", \"exported_pod\", \"(.+)\") * on (namespace, pod) group_left () (namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\",workload=~\"$workload\"})) \u003e 0)",
+                        "legendFormat": "{{pod}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "query-0",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "percentunit",
+                  "min": 0,
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": null,
+                        "color": "green"
+                      },
+                      {
+                        "value": 0.8,
+                        "color": "yellow"
+                      },
+                      {
+                        "value": 0.9,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "custom": {
+                    "gradientMode": "none",
+                    "lineWidth": 1,
+                    "fillOpacity": 8,
+                    "showPoints": "never"
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "network-io": {
+        "kind": "Panel",
+        "spec": {
+          "id": 9,
+          "title": "Network I/O by Pod",
+          "description": "Pod network throughput for the selected workload. Transmit is drawn below the axis, matching the overview's convention.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "spec": {
+                        "expr": "sum by (pod) (rate(container_network_receive_bytes_total{job=\"kubelet\",namespace=~\"$namespace\",namespace!=\"\"}[$__rate_interval]) * on (namespace, pod) group_left () (namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\",workload=~\"$workload\"}))",
+                        "legendFormat": "RX {{pod}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "query-0",
+                    "hidden": false
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "spec": {
+                        "expr": "sum by (pod) (rate(container_network_transmit_bytes_total{job=\"kubelet\",namespace=~\"$namespace\",namespace!=\"\"}[$__rate_interval]) * on (namespace, pod) group_left () (namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\",workload=~\"$workload\"}))",
+                        "legendFormat": "TX {{pod}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "query-1",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "Bps",
+                  "custom": {
+                    "gradientMode": "none",
+                    "lineWidth": 1,
+                    "fillOpacity": 8,
+                    "showPoints": "never"
+                  }
+                },
+                "overrides": [
+                  {
+                    "matcher": {
+                      "id": "byRegexp",
+                      "options": "TX.*"
+                    },
+                    "properties": [
+                      {
+                        "id": "custom.transform",
+                        "value": "negative-Y"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "restarts-by-pod": {
+        "kind": "Panel",
+        "spec": {
+          "id": 10,
+          "title": "Restarts by Pod",
+          "description": "",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "spec": {
+                        "expr": "sum by (pod) (sum by (namespace, pod) (label_replace(label_replace(rate(kube_pod_container_status_restarts_total{job=\"kube-state-metrics\",exported_namespace=~\"$namespace\"}[$__rate_interval]), \"namespace\", \"$1\", \"exported_namespace\", \"(.+)\"), \"pod\", \"$1\", \"exported_pod\", \"(.+)\")) * on (namespace, pod) group_left () (namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\",workload=~\"$workload\"}))",
+                        "legendFormat": "{{pod}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "query-0",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "short",
+                  "custom": {
+                    "gradientMode": "none",
+                    "lineWidth": 1,
+                    "fillOpacity": 8,
+                    "showPoints": "never"
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "restarts-by-workload": {
+        "kind": "Panel",
+        "spec": {
+          "id": 3,
+          "title": "Restarts by Workload",
+          "description": "Container restarts per second, attributed to the owning workload.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "spec": {
+                        "expr": "sum by (workload, workload_type) (sum by (namespace, pod) (label_replace(label_replace(rate(kube_pod_container_status_restarts_total{job=\"kube-state-metrics\",exported_namespace=~\"$namespace\"}[$__rate_interval]), \"namespace\", \"$1\", \"exported_namespace\", \"(.+)\"), \"pod\", \"$1\", \"exported_pod\", \"(.+)\")) * on (namespace, pod) group_left (workload, workload_type) (namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\",workload=~\"$workload\"}))",
+                        "legendFormat": "{{workload_type}}/{{workload}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "query-0",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "short",
+                  "custom": {
+                    "gradientMode": "none",
+                    "lineWidth": 1,
+                    "fillOpacity": 8,
+                    "showPoints": "never"
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "waiting-reasons": {
+        "kind": "Panel",
+        "spec": {
+          "id": 11,
+          "title": "Containers Waiting by Reason",
+          "description": "Containers stuck waiting — CrashLoopBackOff, ImagePullBackOff, CreateContainerConfigError. Zero for every pod is the healthy state.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "spec": {
+                        "expr": "sum by (pod, reason) (label_replace(label_replace(kube_pod_container_status_waiting_reason{job=\"kube-state-metrics\",exported_namespace=~\"$namespace\"}, \"namespace\", \"$1\", \"exported_namespace\", \"(.+)\"), \"pod\", \"$1\", \"exported_pod\", \"(.+)\") * on (namespace, pod) group_left () (namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\",workload=~\"$workload\"}))",
+                        "legendFormat": "{{pod}} · {{reason}}",
+                        "range": true
+                      }
+                    },
+                    "refId": "query-0",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true,
+                  "calcs": []
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "short",
+                  "custom": {
+                    "gradientMode": "none",
+                    "lineWidth": 1,
+                    "fillOpacity": 8,
+                    "showPoints": "never"
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
       }
     },
-    {
-      "type": "row",
-      "collapsed": false,
-      "title": "Network",
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 27
-      },
-      "id": 0,
-      "panels": []
-    },
-    {
-      "type": "timeseries",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${ds}"
-          },
-          "expr": "sum by (pod) (rate(container_network_receive_bytes_total{job=\"kubelet\",namespace=~\"$namespace\",namespace!=\"\"}[$__rate_interval]) * on (namespace, pod) group_left () (namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\",workload=~\"$workload\"}))",
-          "instant": false,
-          "legendFormat": "RX {{pod}}",
-          "range": true
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${ds}"
-          },
-          "expr": "sum by (pod) (rate(container_network_transmit_bytes_total{job=\"kubelet\",namespace=~\"$namespace\",namespace!=\"\"}[$__rate_interval]) * on (namespace, pod) group_left () (namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\",workload=~\"$workload\"}))",
-          "instant": false,
-          "legendFormat": "TX {{pod}}",
-          "range": true
-        }
-      ],
-      "title": "Network I/O by Pod",
-      "description": "Pod network throughput for the selected workload. Transmit is drawn below the axis, matching the overview's convention.",
-      "transparent": false,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${ds}"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 28
-      },
-      "repeatDirection": "h",
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": []
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "Bps",
-          "min": 0,
-          "custom": {
-            "gradientMode": "none",
-            "lineWidth": 1,
-            "fillOpacity": 8,
-            "showPoints": "never"
-          }
-        },
-        "overrides": [
+    "layout": {
+      "kind": "RowsLayout",
+      "spec": {
+        "rows": [
           {
-            "matcher": {
-              "id": "byRegexp",
-              "options": "TX.*"
-            },
-            "properties": [
-              {
-                "id": "custom.transform",
-                "value": "negative-Y"
+            "kind": "RowsLayoutRow",
+            "spec": {
+              "title": "Workloads in $namespace",
+              "layout": {
+                "kind": "GridLayout",
+                "spec": {
+                  "items": [
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 0,
+                        "y": 0,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "cpu-by-workload"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 8,
+                        "y": 0,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "memory-by-workload"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 16,
+                        "y": 0,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "restarts-by-workload"
+                        }
+                      }
+                    }
+                  ]
+                }
               }
-            ]
+            }
+          },
+          {
+            "kind": "RowsLayoutRow",
+            "spec": {
+              "title": "CPU",
+              "layout": {
+                "kind": "GridLayout",
+                "spec": {
+                  "items": [
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 0,
+                        "y": 0,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "cpu-by-pod"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 8,
+                        "y": 0,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "cpu-vs-requests"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 16,
+                        "y": 0,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "cpu-throttling"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "kind": "RowsLayoutRow",
+            "spec": {
+              "title": "Memory",
+              "layout": {
+                "kind": "GridLayout",
+                "spec": {
+                  "items": [
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 0,
+                        "y": 0,
+                        "width": 12,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "memory-by-pod"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 12,
+                        "y": 0,
+                        "width": 12,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "memory-vs-limits"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "kind": "RowsLayoutRow",
+            "spec": {
+              "title": "Network",
+              "layout": {
+                "kind": "GridLayout",
+                "spec": {
+                  "items": [
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 0,
+                        "y": 0,
+                        "width": 24,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "network-io"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "kind": "RowsLayoutRow",
+            "spec": {
+              "title": "Health",
+              "layout": {
+                "kind": "GridLayout",
+                "spec": {
+                  "items": [
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 0,
+                        "y": 0,
+                        "width": 12,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "restarts-by-pod"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 12,
+                        "y": 0,
+                        "width": 12,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "waiting-reasons"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
           }
         ]
       }
     },
-    {
-      "type": "row",
-      "collapsed": false,
-      "title": "Health",
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 36
+    "links": [
+      {
+        "title": "Generated from code — edits here are overwritten",
+        "type": "link",
+        "icon": "code-branch",
+        "tooltip": "",
+        "url": "https://github.com/duynhlab/obs-as-code",
+        "tags": [],
+        "asDropdown": false,
+        "targetBlank": true,
+        "includeVars": false,
+        "keepTime": false
       },
-      "id": 0,
-      "panels": []
-    },
-    {
-      "type": "timeseries",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${ds}"
-          },
-          "expr": "sum by (pod) (sum by (namespace, pod) (label_replace(label_replace(rate(kube_pod_container_status_restarts_total{job=\"kube-state-metrics\",exported_namespace=~\"$namespace\"}[$__rate_interval]), \"namespace\", \"$1\", \"exported_namespace\", \"(.+)\"), \"pod\", \"$1\", \"exported_pod\", \"(.+)\")) * on (namespace, pod) group_left () (namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\",workload=~\"$workload\"}))",
-          "instant": false,
-          "legendFormat": "{{pod}}",
-          "range": true
-        }
-      ],
-      "title": "Restarts by Pod",
-      "transparent": false,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${ds}"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 37
-      },
-      "repeatDirection": "h",
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": []
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "min": 0,
-          "custom": {
-            "gradientMode": "none",
-            "lineWidth": 1,
-            "fillOpacity": 8,
-            "showPoints": "never"
-          }
-        },
-        "overrides": []
+      {
+        "title": "Cluster overview",
+        "type": "link",
+        "icon": "dashboard",
+        "tooltip": "",
+        "url": "/d/kubernetes-cluster-overview",
+        "tags": [],
+        "asDropdown": false,
+        "targetBlank": false,
+        "includeVars": false,
+        "keepTime": false
       }
-    },
-    {
-      "type": "timeseries",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${ds}"
-          },
-          "expr": "sum by (pod, reason) (label_replace(label_replace(kube_pod_container_status_waiting_reason{job=\"kube-state-metrics\",exported_namespace=~\"$namespace\"}, \"namespace\", \"$1\", \"exported_namespace\", \"(.+)\"), \"pod\", \"$1\", \"exported_pod\", \"(.+)\") * on (namespace, pod) group_left () (namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\",workload=~\"$workload\"}))",
-          "instant": false,
-          "legendFormat": "{{pod}} · {{reason}}",
-          "range": true
-        }
+    ],
+    "preload": false,
+    "tags": [
+      "obs-as-code",
+      "owner:platform",
+      "kubernetes",
+      "workloads"
+    ],
+    "timeSettings": {
+      "timezone": "browser",
+      "from": "now-6h",
+      "to": "now",
+      "autoRefresh": "1m",
+      "autoRefreshIntervals": [
+        "30s",
+        "1m",
+        "5m",
+        "15m",
+        "1h"
       ],
-      "title": "Containers Waiting by Reason",
-      "description": "Containers stuck waiting — CrashLoopBackOff, ImagePullBackOff, CreateContainerConfigError. Zero for every pod is the healthy state.",
-      "transparent": false,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${ds}"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 37
-      },
-      "repeatDirection": "h",
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": []
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
+      "hideTimepicker": false,
+      "fiscalYearStartMonth": 0
+    },
+    "title": "Kubernetes Workloads",
+    "variables": [
+      {
+        "kind": "DatasourceVariable",
+        "spec": {
+          "name": "ds",
+          "pluginId": "prometheus",
+          "refresh": "never",
+          "regex": "",
+          "current": {
+            "text": "VictoriaMetrics (Prometheus)",
+            "value": "VictoriaMetrics (Prometheus)"
+          },
+          "options": [],
+          "multi": false,
+          "includeAll": false,
+          "label": "Datasource",
+          "hide": "dontHide",
+          "skipUrlSync": false,
+          "allowCustomValue": false
         }
       },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "min": 0,
-          "custom": {
-            "gradientMode": "none",
-            "lineWidth": 1,
-            "fillOpacity": 8,
-            "showPoints": "never"
-          }
-        },
-        "overrides": []
-      }
-    }
-  ],
-  "templating": {
-    "list": [
       {
-        "type": "datasource",
-        "name": "ds",
-        "label": "Datasource",
-        "skipUrlSync": false,
-        "query": "prometheus",
-        "current": {
-          "text": "VictoriaMetrics (Prometheus)",
-          "value": "VictoriaMetrics (Prometheus)"
-        },
-        "multi": false,
-        "allowCustomValue": false,
-        "includeAll": false,
-        "auto": false,
-        "auto_min": "10s",
-        "auto_count": 30
+        "kind": "QueryVariable",
+        "spec": {
+          "name": "namespace",
+          "current": {
+            "text": "",
+            "value": ""
+          },
+          "label": "Namespace",
+          "hide": "dontHide",
+          "refresh": "onTimeRangeChanged",
+          "skipUrlSync": false,
+          "query": {
+            "kind": "DataQuery",
+            "group": "prometheus",
+            "version": "v0",
+            "datasource": {
+              "name": "${ds}"
+            },
+            "spec": {
+              "expr": "label_values(kube_pod_info, exported_namespace)"
+            }
+          },
+          "regex": "",
+          "regexApplyTo": "value",
+          "sort": "alphabeticalAsc",
+          "options": [],
+          "multi": false,
+          "includeAll": false,
+          "allowCustomValue": true
+        }
       },
       {
-        "type": "query",
-        "name": "namespace",
-        "label": "Namespace",
-        "skipUrlSync": false,
-        "query": "label_values(kube_pod_info, exported_namespace)",
-        "datasource": {
-          "type": "prometheus",
-          "uid": "${ds}"
-        },
-        "multi": false,
-        "allowCustomValue": true,
-        "refresh": 2,
-        "sort": 1,
-        "includeAll": false,
-        "auto": false,
-        "auto_min": "10s",
-        "auto_count": 30
+        "kind": "QueryVariable",
+        "spec": {
+          "name": "workload_type",
+          "current": {
+            "text": "",
+            "value": ""
+          },
+          "label": "Type",
+          "hide": "dontHide",
+          "refresh": "onTimeRangeChanged",
+          "skipUrlSync": false,
+          "query": {
+            "kind": "DataQuery",
+            "group": "prometheus",
+            "version": "v0",
+            "datasource": {
+              "name": "${ds}"
+            },
+            "spec": {
+              "expr": "label_values(namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\"}, workload_type)"
+            }
+          },
+          "regex": "",
+          "regexApplyTo": "value",
+          "sort": "alphabeticalAsc",
+          "options": [],
+          "multi": true,
+          "includeAll": true,
+          "allowCustomValue": true
+        }
       },
       {
-        "type": "query",
-        "name": "workload_type",
-        "label": "Type",
-        "skipUrlSync": false,
-        "query": "label_values(namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\"}, workload_type)",
-        "datasource": {
-          "type": "prometheus",
-          "uid": "${ds}"
-        },
-        "multi": true,
-        "allowCustomValue": true,
-        "refresh": 2,
-        "sort": 1,
-        "includeAll": true,
-        "auto": false,
-        "auto_min": "10s",
-        "auto_count": 30
-      },
-      {
-        "type": "query",
-        "name": "workload",
-        "label": "Workload",
-        "skipUrlSync": false,
-        "query": "label_values(namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\"}, workload)",
-        "datasource": {
-          "type": "prometheus",
-          "uid": "${ds}"
-        },
-        "multi": true,
-        "allowCustomValue": true,
-        "refresh": 2,
-        "sort": 1,
-        "includeAll": true,
-        "auto": false,
-        "auto_min": "10s",
-        "auto_count": 30
+        "kind": "QueryVariable",
+        "spec": {
+          "name": "workload",
+          "current": {
+            "text": "",
+            "value": ""
+          },
+          "label": "Workload",
+          "hide": "dontHide",
+          "refresh": "onTimeRangeChanged",
+          "skipUrlSync": false,
+          "query": {
+            "kind": "DataQuery",
+            "group": "prometheus",
+            "version": "v0",
+            "datasource": {
+              "name": "${ds}"
+            },
+            "spec": {
+              "expr": "label_values(namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\"}, workload)"
+            }
+          },
+          "regex": "",
+          "regexApplyTo": "value",
+          "sort": "alphabeticalAsc",
+          "options": [],
+          "multi": true,
+          "includeAll": true,
+          "allowCustomValue": true
+        }
       }
     ]
-  },
-  "annotations": {},
-  "links": [
-    {
-      "title": "Generated from code — edits here are overwritten",
-      "type": "link",
-      "icon": "code-branch",
-      "tooltip": "",
-      "url": "https://github.com/duynhlab/obs-as-code",
-      "tags": [],
-      "asDropdown": false,
-      "placement": "inControlsMenu",
-      "targetBlank": true,
-      "includeVars": false,
-      "keepTime": false
-    },
-    {
-      "title": "Cluster overview",
-      "type": "link",
-      "icon": "dashboard",
-      "tooltip": "",
-      "url": "/d/kubernetes-cluster-overview",
-      "tags": [],
-      "asDropdown": false,
-      "placement": "inControlsMenu",
-      "targetBlank": false,
-      "includeVars": false,
-      "keepTime": false
-    }
-  ]
+  }
 }

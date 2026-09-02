@@ -2,10 +2,8 @@ package profile_test
 
 import (
 	"errors"
-	"maps"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/duynhlab/obs-as-code/internal/profile"
 )
@@ -26,25 +24,17 @@ func TestCluster(t *testing.T) {
 	if got, want := p.MetricsPlugin, "prometheus"; got != want {
 		t.Errorf("MetricsPlugin = %q, want %q (boards must stay portable to a plain Prometheus)", got, want)
 	}
-	if got, want := p.Namespace, "monitoring"; got != want {
-		t.Errorf("Namespace = %q, want %q (grafana-operator runs watchNamespaces=monitoring)", got, want)
-	}
-	if got, want := p.InstanceLabels["dashboards"], "grafana"; got != want {
-		t.Errorf(`InstanceLabels["dashboards"] = %q, want %q`, got, want)
-	}
 }
 
 func TestProfileMetricsRef(t *testing.T) {
 	t.Parallel()
 
-	ref := profile.Cluster().MetricsRef()
-
-	if ref.Type == nil || *ref.Type != "prometheus" {
-		t.Errorf("Type = %v, want %q", ref.Type, "prometheus")
+	ref, err := profile.Cluster().MetricsRef().Build()
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
 	}
-	// The UID must be the variable reference, never a literal instance UID.
-	if ref.Uid == nil || *ref.Uid != "${ds}" {
-		t.Errorf("Uid = %v, want %q", ref.Uid, "${ds}")
+	if ref.Name == nil || *ref.Name != "${ds}" {
+		t.Errorf("Name = %v, want %q", ref.Name, "${ds}")
 	}
 }
 
@@ -64,17 +54,13 @@ func TestProfileMetricsVariable(t *testing.T) {
 		t.Fatalf("Build() error = %v", err)
 	}
 
-	if got, want := v.Name, "ds"; got != want {
+	if got, want := v.Spec.Name, "ds"; got != want {
 		t.Errorf("Name = %q, want %q", got, want)
 	}
-	// For a datasource variable Grafana stores the plugin type-id in `query`.
-	if v.Query == nil {
-		t.Fatal("Query is nil, want the plugin type-id")
+	if got, want := v.Spec.PluginId, "prometheus"; got != want {
+		t.Errorf("PluginId = %q, want %q", got, want)
 	}
-	if got, want := v.Query.String, "prometheus"; got == nil || *got != want {
-		t.Errorf("Query = %v, want %q", got, want)
-	}
-	if v.AllowCustomValue == nil || *v.AllowCustomValue {
+	if v.Spec.AllowCustomValue {
 		t.Error("AllowCustomValue is true; a typed-in datasource name cannot resolve")
 	}
 }
@@ -93,8 +79,6 @@ func TestProfileValidate(t *testing.T) {
 		{name: "no name", mutate: func(p *profile.Profile) { p.Name = "" }, wantErr: "Name"},
 		{name: "no metrics plugin", mutate: func(p *profile.Profile) { p.MetricsPlugin = "" }, wantErr: "MetricsPlugin"},
 		{name: "no metrics var", mutate: func(p *profile.Profile) { p.MetricsVar = "" }, wantErr: "MetricsVar"},
-		{name: "no namespace", mutate: func(p *profile.Profile) { p.Namespace = "" }, wantErr: "Namespace"},
-		{name: "no instance labels", mutate: func(p *profile.Profile) { p.InstanceLabels = nil }, wantErr: "InstanceLabels"},
 	}
 
 	for _, tt := range tests {
@@ -102,7 +86,6 @@ func TestProfileValidate(t *testing.T) {
 			t.Parallel()
 
 			p := profile.Cluster()
-			p.InstanceLabels = maps.Clone(p.InstanceLabels)
 			tt.mutate(&p)
 
 			err := p.Validate()
@@ -132,12 +115,12 @@ func TestProfileValidateReportsEveryMissingField(t *testing.T) {
 	// A profile missing several fields must report all of them at once, in a
 	// stable order — reporting one per run turns fixing a fresh profile into a
 	// guessing game, and an unstable order makes the message untestable.
-	err := profile.Profile{ResyncPeriod: time.Second}.Validate()
+	err := profile.Profile{}.Validate()
 	if err == nil {
 		t.Fatal("Validate() = nil, want an error")
 	}
 
-	const want = "[InstanceLabels MetricsPlugin MetricsVar Name Namespace]"
+	const want = "[MetricsPlugin MetricsVar Name]"
 	if !strings.Contains(err.Error(), want) {
 		t.Errorf("Validate() = %v, want it to contain %s", err, want)
 	}

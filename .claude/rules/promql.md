@@ -55,6 +55,14 @@ one needs a number, one a label name. Constraining the position makes the check
 complete rather than a guess. If a board needs a variable elsewhere, resolve it
 in Go and pass the resulting string.
 
+PromQL's `$1` in a `label_replace` replacement is a regex capture reference,
+not a Grafana variable, and remains valid. A Grafana `$name` in that same string
+is rejected.
+
+`Selector.Matchers()` requires a non-empty `Job`, and workload query functions
+require a non-empty namespace. They panic on invalid programmer input so an
+unscoped query cannot silently reach production.
+
 Macros are substituted before parsing and must come from the list in
 `internal/promql/promql.go`. A macro not in that list is rejected, so adding one
 is a deliberate decision.

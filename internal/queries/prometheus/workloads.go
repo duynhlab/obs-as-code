@@ -1,6 +1,9 @@
 package prometheus
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // OwnershipRule is kubernetes-mixin's pod→workload mapping, evaluated by
 // vmalert in homelab:
@@ -32,8 +35,19 @@ type WorkloadSelector struct {
 	Workload string
 }
 
+// Validate rejects workload queries that would scan every namespace.
+func (s WorkloadSelector) Validate() error {
+	if strings.TrimSpace(s.Namespace) == "" {
+		return fmt.Errorf("workload selector: namespace is empty; an unscoped query walks the whole cluster")
+	}
+	return nil
+}
+
 // ownership renders the recording-rule selector for s.
 func (s WorkloadSelector) ownership() string {
+	if err := s.Validate(); err != nil {
+		panic(err)
+	}
 	out := fmt.Sprintf(`%s{namespace=~%q`, OwnershipRule, s.Namespace)
 	if s.WorkloadType != "" {
 		out += fmt.Sprintf(`,workload_type=~%q`, s.WorkloadType)

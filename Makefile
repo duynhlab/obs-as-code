@@ -25,7 +25,7 @@ help: ## Display this help
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
 .PHONY: check
-check: tidy-check fmt vet build-linux lint test generate diff ## Everything CI runs; green before every commit
+check: tidy-check fmt vet build-linux lint test diff validate ## Everything CI runs; green before every commit
 
 ##@ Go
 
@@ -92,26 +92,29 @@ generate: ## Render every dashboard to JSON in $(OUT)
 	$(GO) run ./cmd/generate -out=$(OUT)
 
 .PHONY: diff
-diff: ## Fail if $(OUT) is not in sync with the code
-	@if [[ -n "$$(git status --porcelain -- $(OUT))" ]]; then \
-		echo "✘ $(OUT) is out of sync with the code. Run 'make generate' and commit the result."; \
-		git --no-pager diff --stat -- $(OUT); \
+diff: ## Regenerate in a temporary directory and compare with $(OUT)
+	@tmp="$$(mktemp -d)"; \
+	trap 'rm -rf "$$tmp"' EXIT; \
+	$(GO) run ./cmd/generate -out="$$tmp/generated" >/dev/null; \
+	if ! diff -ru "$(OUT)" "$$tmp/generated"; then \
+		echo "✘ $(OUT) is out of sync with the code. Run 'make generate'."; \
 		exit 1; \
 	fi
-	@echo "✔ $(OUT) is in sync"
+	@echo "✔ $(OUT) is in sync with the code"
+
+.PHONY: validate
+validate: ## Validate JSON identity and build the deployable Kustomization
+	@./hack/validate.sh "$(OUT)"
+
+.PHONY: dry-run
+dry-run: generate ## Server-side dry-run against the current Kubernetes context
+	kubectl apply --dry-run=server -k "$(OUT)/cluster/manifests"
 
 ##@ Preview
 
 .PHONY: preview
-preview: generate ## Run Grafana locally with the generated dashboards provisioned
-	@echo "→ Grafana on http://localhost:3000 (anonymous admin). Ctrl-C to stop."
-	docker run --rm -p 3000:3000 \
-		-e GF_AUTH_ANONYMOUS_ENABLED=true \
-		-e GF_AUTH_ANONYMOUS_ORG_ROLE=Admin \
-		-e GF_AUTH_DISABLE_LOGIN_FORM=true \
-		-v "$$PWD/$(OUT)/cluster/dashboards:/var/lib/grafana/dashboards:ro" \
-		-v "$$PWD/hack/provisioning:/etc/grafana/provisioning:ro" \
-		$(GRAFANA_IMAGE)
+preview: generate ## Run Grafana locally and import Dashboard V2 resources
+	@GRAFANA_IMAGE="$(GRAFANA_IMAGE)" ./hack/preview.sh "$(OUT)/cluster/dashboards"
 
 ##@ Utilities
 

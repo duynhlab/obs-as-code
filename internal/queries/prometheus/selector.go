@@ -45,6 +45,9 @@ type Selector struct {
 // Matchers renders s as a PromQL label matcher list including the braces, e.g.
 // `{job=~"$job",namespace=~"$ns"}`.
 func (s Selector) Matchers(additional ...string) string {
+	if err := s.Validate(); err != nil {
+		panic(err)
+	}
 	parts := make([]string, 0, 2+len(s.Extra)+len(additional))
 
 	if s.Job != "" {
@@ -65,9 +68,6 @@ func (s Selector) Matchers(additional ...string) string {
 
 	parts = append(parts, additional...)
 
-	if len(parts) == 0 {
-		return ""
-	}
 	return "{" + strings.Join(parts, ",") + "}"
 }
 

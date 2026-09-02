@@ -81,6 +81,8 @@ func Sanitize(expr string) (string, error) {
 func variableOutsideString(expr string) (string, bool) {
 	var quote byte
 	escaped := false
+	matcherValue := false
+	braceDepth := 0
 
 	for i := 0; i < len(expr); i++ {
 		c := expr[i]
@@ -94,14 +96,39 @@ func variableOutsideString(expr string) (string, bool) {
 			escaped = true
 		case quote != 0 && c == quote:
 			quote = 0
+			matcherValue = false
+		case quote != 0 && c == '$' && !matcherValue && isGrafanaVariable(expr[i:]):
+			return variableToken(expr[i:]), true
 		case quote == 0 && (c == '"' || c == '\''):
 			quote = c
-		case quote == 0 && c == '$':
+			matcherValue = braceDepth > 0 && followsMatcherOperator(expr[:i])
+		case quote == 0 && c == '{':
+			braceDepth++
+		case quote == 0 && c == '}' && braceDepth > 0:
+			braceDepth--
+		case quote == 0 && c == '$' && isGrafanaVariable(expr[i:]):
 			return variableToken(expr[i:]), true
 		}
 	}
 
 	return "", false
+}
+
+func isGrafanaVariable(s string) bool {
+	if len(s) < 2 || s[0] != '$' {
+		return false
+	}
+	return s[1] == '{' || s[1] == '_' || (s[1] >= 'a' && s[1] <= 'z') || (s[1] >= 'A' && s[1] <= 'Z')
+}
+
+func followsMatcherOperator(prefix string) bool {
+	prefix = strings.TrimSpace(prefix)
+	for _, operator := range []string{"=~", "!~", "!=", "="} {
+		if strings.HasSuffix(prefix, operator) {
+			return true
+		}
+	}
+	return false
 }
 
 // variableToken extracts the variable reference starting at s[0] == '$'.

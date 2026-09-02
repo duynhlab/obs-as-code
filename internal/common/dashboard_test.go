@@ -22,14 +22,11 @@ func TestNewDashboardAppliesHouseDefaults(t *testing.T) {
 		t.Fatalf("Build() error = %v", err)
 	}
 
-	if board.Uid == nil || *board.Uid != "defaults" {
-		t.Errorf("Uid = %v, want %q", board.Uid, "defaults")
+	if got, want := board.TimeSettings.AutoRefresh, "1m"; got != want {
+		t.Errorf("AutoRefresh = %q, want %q", got, want)
 	}
-	if board.Refresh == nil || *board.Refresh != "1m" {
-		t.Errorf("Refresh = %v, want %q", board.Refresh, "1m")
-	}
-	if board.Time == nil || board.Time.From != "now-6h" {
-		t.Errorf("Time.From = %v, want %q", board.Time, "now-6h")
+	if got, want := board.TimeSettings.From, "now-6h"; got != want {
+		t.Errorf("TimeSettings.From = %q, want %q", got, want)
 	}
 
 	// Every generated board must be findable as generated.
@@ -45,10 +42,14 @@ func TestNewDashboardAppliesHouseDefaults(t *testing.T) {
 
 	// Without the datasource variable, "${ds}" resolves to nothing and every
 	// panel on the board renders empty.
-	if len(board.Templating.List) == 0 {
+	if len(board.Variables) == 0 {
 		t.Fatal("board has no template variables; the datasource variable is missing")
 	}
-	if got, want := board.Templating.List[0].Name, p.MetricsVar; got != want {
+	variable := board.Variables[0].DatasourceVariableKind
+	if variable == nil {
+		t.Fatal("first variable is not a DatasourceVariable")
+	}
+	if got, want := variable.Spec.Name, p.MetricsVar; got != want {
 		t.Errorf("first variable = %q, want %q", got, want)
 	}
 

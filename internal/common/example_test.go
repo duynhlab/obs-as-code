@@ -16,13 +16,13 @@ func ExampleNewDashboard() {
 		panic(err)
 	}
 
-	fmt.Println(*board.Uid)
+	fmt.Println(board.Title)
 	fmt.Println(board.Tags)
-	fmt.Println(*board.Refresh)
-	fmt.Println(board.Templating.List[0].Name)
+	fmt.Println(board.TimeSettings.AutoRefresh)
+	fmt.Println(board.Variables[0].DatasourceVariableKind.Spec.Name)
 
 	// Output:
-	// my-board
+	// My Board
 	// [obs-as-code owner:platform http]
 	// 1m
 	// ds

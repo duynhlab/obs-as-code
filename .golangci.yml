@@ -94,16 +94,6 @@ linters:
       - legacy
       - std-error-handling
     rules:
-      # The Foundation SDK marks the classic dashboard model deprecated in
-      # favour of dashboardv2, but v2 is not what anything downstream reads:
-      # GrafanaDashboard.spec.gzipJson carries a classic model, and every one of
-      # the cluster's existing boards is one. Moving would mean the operator and
-      # Grafana 13.2 rejecting or silently mis-rendering the output. Revisit when
-      # grafana-operator documents v2 support; until then the warning is noise
-      # about a migration that cannot be made yet.
-      - linters: [staticcheck]
-        text: "SA1019.*(dashboard\\.Dashboard|dashboard\\.NewDashboardBuilder|dashboard\\.DashboardBuilder)"
-
       # gosec's threat model is production code handling untrusted input. In
       # tests, 0644 fixture files and a seeded PRNG are the correct choices, and
       # silencing each one individually buries the real findings.
