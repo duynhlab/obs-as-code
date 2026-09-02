@@ -36,6 +36,26 @@ const (
 // container_* series carry a plain, correct `namespace`.
 const cadvisorNamespace = "namespace"
 
+// anchoredCount wraps a count() over a sparse bad-thing series so an empty
+// result renders as 0 instead of "No data" — found by the live audit of homelab
+// PR 963: an operator could not tell "nothing is crashlooping" from "this panel
+// is broken".
+//
+// Anchored on kube_node_info rather than a bare `or on() vector(0)`, because the
+// bare form trades one ambiguity for a worse one:
+//
+//	cluster state           bare vector(0)         anchored
+//	healthy, KSM up         0                      0
+//	bad things exist        N                      N
+//	KSM down / job renamed  0 — reads healthy      blank — outage visible
+//
+// kube_node_info is the anchor because it is authored by kube-state-metrics
+// itself (so it proves KSM is emitting, which `up` alone would not) and exists
+// whenever KSM does.
+func anchoredCount(countExpr string) string {
+	return fmt.Sprintf(`%s or (0 * sum(kube_node_info{job=%q}))`, countExpr, jobKubeStateMetrics)
+}
+
 // ---------------------------------------------------------------------------
 // Cluster state (kube-state-metrics)
 // ---------------------------------------------------------------------------
@@ -111,7 +131,7 @@ func requestsVsAllocatable(resource string) string {
 // comparison matches nothing and the panel misses the very case it exists to
 // catch. The unavailable-replicas metric is always present.
 func DeploymentsUnavailable() string {
-	return fmt.Sprintf(`count(kube_deployment_status_replicas_unavailable{job=%q} > 0)`, jobKubeStateMetrics)
+	return anchoredCount(fmt.Sprintf(`count(kube_deployment_status_replicas_unavailable{job=%q} > 0)`, jobKubeStateMetrics))
 }
 
 // StatefulSetsUnavailable counts StatefulSets with fewer ready replicas than
@@ -126,7 +146,7 @@ func StatefulSetsUnavailable() string {
 	desired := fmt.Sprintf(`kube_statefulset_status_replicas{job=%q}`, jobKubeStateMetrics)
 	ready := fmt.Sprintf(`kube_statefulset_status_replicas_ready{job=%q}`, jobKubeStateMetrics)
 
-	return fmt.Sprintf(`count((%[1]s - (%[2]s or %[1]s * 0)) > 0)`, desired, ready)
+	return anchoredCount(fmt.Sprintf(`count((%[1]s - (%[2]s or %[1]s * 0)) > 0)`, desired, ready))
 }
 
 // PodsCrashLooping counts containers seen in CrashLoopBackOff within the lookback
@@ -136,9 +156,9 @@ func StatefulSetsUnavailable() string {
 // of its cycle in Running, so an instant query catches it only sometimes and the
 // stat flickers between 0 and 1.
 func PodsCrashLooping(lookback string) string {
-	return fmt.Sprintf(
+	return anchoredCount(fmt.Sprintf(
 		`count(max_over_time(kube_pod_container_status_waiting_reason{job=%q,reason="CrashLoopBackOff"}[%s]) == 1)`,
-		jobKubeStateMetrics, lookback)
+		jobKubeStateMetrics, lookback))
 }
 
 // ContainersOOMKilled counts containers whose most recent termination was an OOM
@@ -151,9 +171,9 @@ func PodsCrashLooping(lookback string) string {
 // window. A correct number under an honest title beats a wrong number under the
 // title someone wanted.
 func ContainersOOMKilled(lookback string) string {
-	return fmt.Sprintf(
+	return anchoredCount(fmt.Sprintf(
 		`count(max_over_time(kube_pod_container_status_last_terminated_reason{job=%q,reason="OOMKilled"}[%s]) == 1)`,
-		jobKubeStateMetrics, lookback)
+		jobKubeStateMetrics, lookback))
 }
 
 // PodRestartsByNamespace is container restarts per second, by namespace.

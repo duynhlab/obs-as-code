@@ -253,3 +253,44 @@ func TestBareNamespaceMatcherFires(t *testing.T) {
 		})
 	}
 }
+
+// TestSparseCountersAnchorTheirZero pins the fix for the PR 963 audit's §7: a
+// count() over a sparse series renders "No data" when empty, and an operator
+// cannot tell "nothing is wrong" from "this panel is broken". Each of these four
+// must carry the kube_node_info anchor — and specifically NOT a bare vector(0),
+// which would make a kube-state-metrics outage read as a healthy zero.
+func TestSparseCountersAnchorTheirZero(t *testing.T) {
+	t.Parallel()
+
+	const anchor = `or (0 * sum(kube_node_info{job="kube-state-metrics"}))`
+
+	anchored := map[string]string{
+		"DeploymentsUnavailable":  queries.DeploymentsUnavailable(),
+		"StatefulSetsUnavailable": queries.StatefulSetsUnavailable(),
+		"PodsCrashLooping":        queries.PodsCrashLooping("5m"),
+		"ContainersOOMKilled":     queries.ContainersOOMKilled("1h"),
+	}
+	for name, expr := range anchored {
+		if !strings.Contains(expr, anchor) {
+			t.Errorf("%s has no anchored zero; empty renders as No data: %s", name, expr)
+		}
+		if strings.Contains(expr, "vector(0)") {
+			t.Errorf("%s uses a bare vector(0); a KSM outage would read as a healthy 0: %s", name, expr)
+		}
+	}
+
+	// The other stats need no anchor: kube_pod_status_phase and
+	// kube_node_status_condition emit 0-valued series for every pod and node, so
+	// their sums return a value even when the answer is zero. Anchoring them too
+	// would be noise, so their absence of the anchor is asserted deliberately.
+	unanchored := map[string]string{
+		"NodesReady":  queries.NodesReady(),
+		"PodsFailed":  queries.PodsInPhase("Failed"),
+		"PodsRunning": queries.PodsInPhase("Running"),
+	}
+	for name, expr := range unanchored {
+		if strings.Contains(expr, anchor) {
+			t.Errorf("%s is anchored but its base series always exist; the anchor is noise here: %s", name, expr)
+		}
+	}
+}

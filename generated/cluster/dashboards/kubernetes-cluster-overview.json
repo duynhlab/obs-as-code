@@ -426,7 +426,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "count(kube_deployment_status_replicas_unavailable{job=\"kube-state-metrics\"} \u003e 0)",
+          "expr": "count(kube_deployment_status_replicas_unavailable{job=\"kube-state-metrics\"} \u003e 0) or (0 * sum(kube_node_info{job=\"kube-state-metrics\"}))",
           "instant": false,
           "legendFormat": "Degraded",
           "range": true
@@ -490,7 +490,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "count((kube_statefulset_status_replicas{job=\"kube-state-metrics\"} - (kube_statefulset_status_replicas_ready{job=\"kube-state-metrics\"} or kube_statefulset_status_replicas{job=\"kube-state-metrics\"} * 0)) \u003e 0)",
+          "expr": "count((kube_statefulset_status_replicas{job=\"kube-state-metrics\"} - (kube_statefulset_status_replicas_ready{job=\"kube-state-metrics\"} or kube_statefulset_status_replicas{job=\"kube-state-metrics\"} * 0)) \u003e 0) or (0 * sum(kube_node_info{job=\"kube-state-metrics\"}))",
           "instant": false,
           "legendFormat": "Degraded",
           "range": true
@@ -554,7 +554,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "count(max_over_time(kube_pod_container_status_waiting_reason{job=\"kube-state-metrics\",reason=\"CrashLoopBackOff\"}[5m]) == 1)",
+          "expr": "count(max_over_time(kube_pod_container_status_waiting_reason{job=\"kube-state-metrics\",reason=\"CrashLoopBackOff\"}[5m]) == 1) or (0 * sum(kube_node_info{job=\"kube-state-metrics\"}))",
           "instant": false,
           "legendFormat": "CrashLooping",
           "range": true
@@ -618,7 +618,7 @@
             "type": "prometheus",
             "uid": "${ds}"
           },
-          "expr": "count(max_over_time(kube_pod_container_status_last_terminated_reason{job=\"kube-state-metrics\",reason=\"OOMKilled\"}[1h]) == 1)",
+          "expr": "count(max_over_time(kube_pod_container_status_last_terminated_reason{job=\"kube-state-metrics\",reason=\"OOMKilled\"}[1h]) == 1) or (0 * sum(kube_node_info{job=\"kube-state-metrics\"}))",
           "instant": false,
           "legendFormat": "OOMKilled",
           "range": true
