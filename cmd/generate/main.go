@@ -1,12 +1,11 @@
-// Command generate renders every registered dashboard to JSON.
+// Command generate renders raw Grafana V2 resources and deployable
+// GrafanaManifest wrappers to JSON.
 //
-// The output is plain Grafana dashboard JSON — the same thing you would export
-// from the UI or import into any Grafana, not a manifest for one particular
-// cluster. Delivery is somebody else's problem by design: the release workflow
-// publishes this tree as an OCI artifact, and a GrafanaDashboard resource in
-// homelab points at a file inside it with spec.oci.
+// Each profile contains raw Dashboard V2 API resources for inspection and
+// GrafanaManifest JSON for deployment. Flux applies the latter from the same OCI
+// artifact, so the operator never performs a second per-dashboard artifact pull.
 //
-// Output is committed, so a pull request shows the dashboard change beside the
+// Output is committed, so a pull request shows the resource change beside the
 // Go change that caused it, and `make diff` fails when the two have drifted.
 package main
 
@@ -21,13 +20,10 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/duynhlab/obs-as-code/internal/catalog"
 	"github.com/duynhlab/obs-as-code/internal/check"
+	"github.com/duynhlab/obs-as-code/internal/delivery"
 	"github.com/duynhlab/obs-as-code/internal/profile"
-	"github.com/duynhlab/obs-as-code/internal/registry"
-
-	// Imported for the registration side effect: this is what puts dashboards in
-	// the registry.
-	_ "github.com/duynhlab/obs-as-code/internal/catalog"
 )
 
 func main() {
@@ -108,7 +104,7 @@ func selectProfiles(name string) ([]profile.Profile, error) {
 func renderProfile(p profile.Profile, outDir string, written map[string]bool, stdout io.Writer) ([]check.Violation, error) {
 	var violations []check.Violation
 
-	for _, d := range registry.Published() {
+	for _, d := range catalog.Published() {
 		model, err := d.Model(p)
 		if err != nil {
 			return nil, err
@@ -117,6 +113,40 @@ func renderProfile(p profile.Profile, outDir string, written map[string]bool, st
 		violations = append(violations, check.Dashboard(d.UID, model)...)
 
 		if err := writeFile(filepath.Join(outDir, p.Name, d.Filename()), model, written, stdout); err != nil {
+			return nil, err
+		}
+	}
+
+	target := delivery.ClusterTarget()
+	manifestResources := make([]string, 0, len(catalog.Deployable())+1)
+	if len(catalog.Deployable()) > 0 {
+		const folderFile = "platform-infrastructure.json"
+		folder, err := delivery.Folder("platform-infrastructure", "Platform / Infrastructure", target)
+		if err != nil {
+			return nil, err
+		}
+		if err := writeFile(filepath.Join(outDir, p.Name, "manifests", folderFile), folder, written, stdout); err != nil {
+			return nil, err
+		}
+		manifestResources = append(manifestResources, folderFile)
+	}
+	for _, d := range catalog.Deployable() {
+		manifest, err := delivery.Dashboard(d, p, target)
+		if err != nil {
+			return nil, err
+		}
+		name := filepath.Base(d.ManifestFilename())
+		if err := writeFile(filepath.Join(outDir, p.Name, d.ManifestFilename()), manifest, written, stdout); err != nil {
+			return nil, err
+		}
+		manifestResources = append(manifestResources, name)
+	}
+	if len(manifestResources) > 0 {
+		body, err := delivery.Kustomization(manifestResources)
+		if err != nil {
+			return nil, err
+		}
+		if err := writeFile(filepath.Join(outDir, p.Name, "manifests", "Kustomization"), body, written, stdout); err != nil {
 			return nil, err
 		}
 	}
@@ -172,7 +202,7 @@ func pruneStale(outDir string, written map[string]bool) ([]string, error) {
 		if err != nil {
 			return err
 		}
-		if d.IsDir() || filepath.Ext(rel) != ".json" {
+		if d.IsDir() || (filepath.Ext(rel) != ".json" && filepath.Base(rel) != "Kustomization") {
 			// Anything this tool does not produce is left alone, so a README or
 			// a .gitkeep can live in the tree.
 			return nil

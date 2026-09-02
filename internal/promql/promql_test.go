@@ -90,6 +90,8 @@ func TestSanitizeRejectsVariableOutsideAMatcher(t *testing.T) {
 		{name: "as a metric name", expr: `$metric{job="a"}`, want: "$metric"},
 		{name: "braced outside a string", expr: `topk(${limit}, up)`, want: "${limit}"},
 		{name: "after a closed matcher", expr: `up{job="a"} > $threshold`, want: "$threshold"},
+		{name: "inside label_replace replacement", expr: `label_replace(up, "dst", "$job", "src", ".*")`, want: "$job"},
+		{name: "inside string comparison", expr: `label_join(up, "dst", "$job", "src")`, want: "$job"},
 	}
 
 	for _, tt := range tests {

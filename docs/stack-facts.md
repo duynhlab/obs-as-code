@@ -3,15 +3,15 @@
 Reference for the cluster these resources target. Linked from `AGENTS.md` but
 deliberately not imported there, so it costs no context until someone needs it.
 
-Verified 2026-08-31 against `duynhlab/homelab`, `duynhlab/helm-charts` and the
-grafana-operator v5.24.0 source.
+Verified 2026-09-02 against `duynhlab/homelab`, the running Kind cluster, and
+Grafana Operator 5.24.0/5.25.0 release behavior.
 
 ## Grafana and the operator
 
 | | |
 |:--|:--|
 | Grafana | `grafana/grafana:13.2.0`, `Grafana/grafana` in namespace `monitoring` |
-| Operator | chart pinned `5.24.0` via `OCIRepository grafana-operator-oci` |
+| Operator | live pre-cutover: 5.24.0; desired homelab change: 5.25.0 |
 | API group | `grafana.integreatly.org/v1beta1` (no v1beta2 anywhere) |
 | Watched namespaces | `monitoring` only — a resource elsewhere is ignored silently |
 | Instance selector | `matchLabels: {dashboards: grafana}` |
@@ -44,10 +44,10 @@ Other datasources: `victorialogs` (`victoriametrics-logs-datasource`, `:9428`),
 (`grafana-clickhouse-datasource`, db `otel`). **No Loki** — logging is Vector →
 VictoriaLogs. Tempo and Jaeger datasources were retired by RFC-0027.
 
-## Delivery, today
+## Delivery
 
-Dashboards reach Grafana through three parallel channels, which this repo exists
-to collapse:
+Most legacy dashboards still reach Grafana through three channels. This repo's
+two Kubernetes boards are the first cutover slice:
 
 | channel | count |
 |:--|:--|
@@ -62,6 +62,12 @@ Flux consumes **only** OCIRepositories. Existing sources:
 `grafana-operator-oci`, `grafana-dashboards-chart-oci`, `infrastructure-oci`.
 There is no `GitRepository` in the cluster.
 
+The selected cutover adds `obs-as-code-oci`; Flux applies
+`./cluster/manifests`. Those files are outer GrafanaManifest v1beta1 resources
+with inline Dashboard V2 templates. The old per-board GrafanaDashboard OCI
+resources are removed. Release `v0.4.0` must exist before enabling the Flux
+source.
+
 ## Alerting, today
 
 73 `PrometheusRule` files, roughly 183 rule groups, evaluated by vmalert. Grafana
@@ -74,9 +80,9 @@ deferred business-metric alerts and SLOs.
 
 ## Folders
 
-No `GrafanaFolder` resources exist. Folders are implicit strings duplicated
-between the cluster resources and the local-stack provisioning, and they have
-already drifted once. `internal/folders` is the fix.
+The obs-as-code artifact creates `platform-infrastructure` through an inline
+`folder.grafana.app/v1` template. Legacy dashboard folders remain implicit until
+their own cutover slices.
 
 ## Metric naming
 

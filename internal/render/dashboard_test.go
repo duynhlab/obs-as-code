@@ -5,87 +5,70 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/grafana/grafana-foundation-sdk/go/dashboard"
-	"github.com/grafana/grafana-foundation-sdk/go/timeseries"
+	"github.com/grafana/grafana-foundation-sdk/go/dashboardv2"
+	"github.com/grafana/grafana-foundation-sdk/go/resource"
 
 	"github.com/duynhlab/obs-as-code/internal/render"
 )
 
-func TestDashboardJSONIsStable(t *testing.T) {
-	t.Parallel()
-
-	built, err := dashboard.NewDashboardBuilder("Stable").Uid("stable").Build()
+func dashboardResource(t *testing.T, name, title string) resource.Manifest {
+	t.Helper()
+	spec, err := dashboardv2.NewDashboardBuilder(title).Tags([]string{"obs-as-code"}).Build()
 	if err != nil {
-		t.Fatalf("Build() error = %v", err)
+		t.Fatal(err)
 	}
-
-	first, err := render.DashboardJSON(built)
+	manifest, err := resource.NewManifestBuilder().ApiVersion("dashboard.grafana.app/v2").Kind("Dashboard").Metadata(resource.Named(name)).Spec(spec).Build()
 	if err != nil {
-		t.Fatalf("DashboardJSON() error = %v", err)
+		t.Fatal(err)
 	}
-	second, err := render.DashboardJSON(built)
-	if err != nil {
-		t.Fatalf("DashboardJSON() error = %v", err)
-	}
-
-	// The output is committed, so instability would surface as a phantom diff on
-	// an unrelated pull request rather than as a failure here.
-	if !bytes.Equal(first, second) {
-		t.Error("DashboardJSON() is not stable across calls")
-	}
-	if !bytes.HasSuffix(first, []byte("\n")) {
-		t.Error("DashboardJSON() has no trailing newline; committed files should")
-	}
+	return manifest
 }
 
-func TestDashboardJSONIsImportable(t *testing.T) {
+func TestDashboardJSONIsStableV2Resource(t *testing.T) {
 	t.Parallel()
-
-	// The point of emitting plain JSON is that it can be imported anywhere, so
-	// the top-level shape Grafana's importer reads must be present and correct.
-	built, err := dashboard.NewDashboardBuilder("Importable").
-		Uid("importable").
-		Tags([]string{"obs-as-code"}).
-		Build()
+	manifest := dashboardResource(t, "stable", "Stable")
+	first, err := render.DashboardJSON(manifest)
 	if err != nil {
-		t.Fatalf("Build() error = %v", err)
+		t.Fatal(err)
 	}
-
-	out, err := render.DashboardJSON(built)
+	second, err := render.DashboardJSON(manifest)
 	if err != nil {
-		t.Fatalf("DashboardJSON() error = %v", err)
+		t.Fatal(err)
 	}
-
-	for _, want := range []string{`"uid": "importable"`, `"title": "Importable"`, `"schemaVersion"`} {
-		if !strings.Contains(string(out), want) {
-			t.Errorf("output is missing %s:\n%s", want, out)
+	if !bytes.Equal(first, second) {
+		t.Error("DashboardJSON is unstable")
+	}
+	if !bytes.HasSuffix(first, []byte("\n")) {
+		t.Error("DashboardJSON has no trailing newline")
+	}
+	for _, want := range []string{`"apiVersion": "dashboard.grafana.app/v2"`, `"kind": "Dashboard"`, `"name": "stable"`, `"title": "Stable"`} {
+		if !strings.Contains(string(first), want) {
+			t.Errorf("output lacks %s:\n%s", want, first)
 		}
 	}
 }
 
-func TestDashboardJSONEnforcesTheSizeBudget(t *testing.T) {
+func TestDashboardJSONEnforcesSizeBudget(t *testing.T) {
 	t.Parallel()
-
-	// Built from real panels rather than padding, so the failure means what the
-	// message says: too much board, not too much text.
-	b := dashboard.NewDashboardBuilder("Huge").Uid("huge")
-	for range 4000 {
-		b = b.WithPanel(timeseries.NewPanelBuilder().
-			Title("A panel with a title long enough to take up room in the model").
-			Description("And a description, because a board this size got there by accident.").
-			Span(8).Height(8))
-	}
-
-	built, err := b.Build()
+	manifest, err := resource.NewManifestBuilder().ApiVersion("dashboard.grafana.app/v2").Kind("Dashboard").Metadata(resource.Named("huge")).Spec(map[string]any{
+		"title": "Huge", "description": strings.Repeat("x", render.MaxModelBytes),
+	}).Build()
 	if err != nil {
-		t.Fatalf("Build() error = %v", err)
+		t.Fatal(err)
 	}
+	_, err = render.DashboardJSON(manifest)
+	if err == nil || !strings.Contains(err.Error(), "split it") {
+		t.Fatalf("DashboardJSON() = %v, want size error", err)
+	}
+}
 
-	_, err = render.DashboardJSON(built)
-	if err == nil {
-		t.Fatal("DashboardJSON() = nil error, want the size budget to reject it")
+func TestJSONRendersAnyResourceCanonically(t *testing.T) {
+	t.Parallel()
+	out, err := render.JSON(map[string]any{"kind": "Kustomization", "apiVersion": "kustomize.config.k8s.io/v1beta1"})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(err.Error(), "split it") {
-		t.Errorf("DashboardJSON() error = %v, want it to say what to do", err)
+	if !bytes.HasSuffix(out, []byte("\n")) {
+		t.Error("JSON has no trailing newline")
 	}
 }

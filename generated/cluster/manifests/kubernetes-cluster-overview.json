@@ -1,0 +1,2268 @@
+{
+  "apiVersion": "grafana.integreatly.org/v1beta1",
+  "kind": "GrafanaManifest",
+  "metadata": {
+    "name": "kubernetes-cluster-overview",
+    "namespace": "monitoring",
+    "labels": {
+      "app.kubernetes.io/managed-by": "obs-as-code"
+    }
+  },
+  "spec": {
+    "instanceSelector": {
+      "matchLabels": {
+        "dashboards": "grafana"
+      }
+    },
+    "resyncPeriod": "10m",
+    "template": {
+      "apiVersion": "dashboard.grafana.app/v2",
+      "kind": "Dashboard",
+      "metadata": {
+        "name": "kubernetes-cluster-overview",
+        "namespace": "default",
+        "annotations": {
+          "grafana.app/folder": "platform-infrastructure"
+        }
+      },
+      "spec": {
+        "annotations": [],
+        "cursorSync": "Crosshair",
+        "editable": true,
+        "elements": {
+          "container-cpu": {
+            "kind": "Panel",
+            "spec": {
+              "id": 18,
+              "title": "CPU Usage by Namespace",
+              "description": "CPU cores consumed, from cAdvisor. 1 means one core fully used.",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "${ds}"
+                          },
+                          "spec": {
+                            "expr": "sum by (namespace) (rate(container_cpu_usage_seconds_total{job=\"kubelet\",namespace=~\"$namespace\",container!=\"\",image!=\"\"}[$__rate_interval]))",
+                            "legendFormat": "{{namespace}}",
+                            "range": true
+                          }
+                        },
+                        "refId": "query-0",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "timeseries",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "legend": {
+                      "displayMode": "list",
+                      "placement": "bottom",
+                      "showLegend": true,
+                      "calcs": []
+                    },
+                    "tooltip": {
+                      "mode": "multi",
+                      "sort": "desc"
+                    }
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "short",
+                      "custom": {
+                        "gradientMode": "none",
+                        "lineWidth": 1,
+                        "fillOpacity": 8,
+                        "showPoints": "never",
+                        "stacking": {
+                          "mode": "normal"
+                        }
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "container-memory": {
+            "kind": "Panel",
+            "spec": {
+              "id": 19,
+              "title": "Memory Usage by Namespace",
+              "description": "Working-set memory, which is the figure the kernel's OOM killer acts on — so it is the figure that predicts a kill.",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "${ds}"
+                          },
+                          "spec": {
+                            "expr": "sum by (namespace) (container_memory_working_set_bytes{job=\"kubelet\",namespace=~\"$namespace\",container!=\"\",image!=\"\"})",
+                            "legendFormat": "{{namespace}}",
+                            "range": true
+                          }
+                        },
+                        "refId": "query-0",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "timeseries",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "legend": {
+                      "displayMode": "list",
+                      "placement": "bottom",
+                      "showLegend": true,
+                      "calcs": []
+                    },
+                    "tooltip": {
+                      "mode": "multi",
+                      "sort": "desc"
+                    }
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "decbytes",
+                      "custom": {
+                        "gradientMode": "none",
+                        "lineWidth": 1,
+                        "fillOpacity": 8,
+                        "showPoints": "never",
+                        "stacking": {
+                          "mode": "normal"
+                        }
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "cpu-requests": {
+            "kind": "Panel",
+            "spec": {
+              "id": 5,
+              "title": "CPU Requests vs Allocatable",
+              "description": "CPU requested by running pods, as a fraction of allocatable CPU. Measures scheduling headroom, not physical headroom: this is a Kind cluster whose nodes share one host, so summed allocatable reports the host's capacity once per node. The scheduler really does decide per node, so this number governs whether the next pod schedules — it does not tell you whether the host will cope.",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "${ds}"
+                          },
+                          "spec": {
+                            "expr": "sum(kube_pod_container_resource_requests{job=\"kube-state-metrics\",resource=\"cpu\"} * on (exported_namespace, exported_pod) group_left () (max by (exported_namespace, exported_pod) (kube_pod_status_phase{job=\"kube-state-metrics\",phase=\"Running\"}) == 1)) / (sum(kube_node_status_allocatable{job=\"kube-state-metrics\",resource=\"cpu\"}) \u003e 0)",
+                            "legendFormat": "CPU",
+                            "range": true
+                          }
+                        },
+                        "refId": "query-0",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "gauge",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "showThresholdLabels": false,
+                    "showThresholdMarkers": true,
+                    "sizing": "auto",
+                    "minVizWidth": 75,
+                    "reduceOptions": {
+                      "values": false,
+                      "calcs": [
+                        "lastNotNull"
+                      ]
+                    },
+                    "minVizHeight": 75,
+                    "orientation": ""
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "percentunit",
+                      "min": 0,
+                      "max": 1,
+                      "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                          {
+                            "value": null,
+                            "color": "green"
+                          },
+                          {
+                            "value": 0.7,
+                            "color": "yellow"
+                          },
+                          {
+                            "value": 0.85,
+                            "color": "red"
+                          }
+                        ]
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "cpu-requests-per-node": {
+            "kind": "Panel",
+            "spec": {
+              "id": 8,
+              "title": "CPU Requests vs Allocatable by Node",
+              "description": "Fraction of each node's allocatable CPU claimed by running pods' requests. The per-node view is the honest one here: Kind nodes share one host, and the scheduler decides per node. No true node utilisation exists on this cluster — no node-exporter, by documented scope-out.",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "${ds}"
+                          },
+                          "spec": {
+                            "expr": "sum by (node) (kube_pod_container_resource_requests{job=\"kube-state-metrics\",resource=\"cpu\"} * on (exported_namespace, exported_pod) group_left () (max by (exported_namespace, exported_pod) (kube_pod_status_phase{job=\"kube-state-metrics\",phase=\"Running\"}) == 1)) / (sum by (node) (kube_node_status_allocatable{job=\"kube-state-metrics\",resource=\"cpu\"}) \u003e 0)",
+                            "legendFormat": "{{node}}",
+                            "range": true
+                          }
+                        },
+                        "refId": "query-0",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "timeseries",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "legend": {
+                      "displayMode": "list",
+                      "placement": "bottom",
+                      "showLegend": true,
+                      "calcs": []
+                    },
+                    "tooltip": {
+                      "mode": "multi",
+                      "sort": "desc"
+                    }
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "percentunit",
+                      "min": 0,
+                      "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                          {
+                            "value": null,
+                            "color": "green"
+                          },
+                          {
+                            "value": 0.7,
+                            "color": "yellow"
+                          },
+                          {
+                            "value": 0.85,
+                            "color": "red"
+                          }
+                        ]
+                      },
+                      "custom": {
+                        "gradientMode": "none",
+                        "lineWidth": 1,
+                        "fillOpacity": 8,
+                        "showPoints": "never"
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "cpu-throttling": {
+            "kind": "Panel",
+            "spec": {
+              "id": 20,
+              "title": "CPU Throttling by Namespace",
+              "description": "Fraction of CFS periods in which containers were throttled. Grouped by namespace rather than pod to keep the series count bounded, and healthy namespaces are kept visible at zero rather than filtered out.",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "${ds}"
+                          },
+                          "spec": {
+                            "expr": "sum by (namespace) (rate(container_cpu_cfs_throttled_periods_total{job=\"kubelet\",namespace=~\"$namespace\",container!=\"\"}[$__rate_interval])) / clamp_min(sum by (namespace) (rate(container_cpu_cfs_periods_total{job=\"kubelet\",namespace=~\"$namespace\",container!=\"\"}[$__rate_interval])), 1)",
+                            "legendFormat": "{{namespace}}",
+                            "range": true
+                          }
+                        },
+                        "refId": "query-0",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "timeseries",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "legend": {
+                      "displayMode": "list",
+                      "placement": "bottom",
+                      "showLegend": true,
+                      "calcs": []
+                    },
+                    "tooltip": {
+                      "mode": "multi",
+                      "sort": "desc"
+                    }
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "percentunit",
+                      "min": 0,
+                      "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                          {
+                            "value": null,
+                            "color": "green"
+                          },
+                          {
+                            "value": 0.25,
+                            "color": "yellow"
+                          },
+                          {
+                            "value": 0.5,
+                            "color": "red"
+                          }
+                        ]
+                      },
+                      "custom": {
+                        "gradientMode": "none",
+                        "lineWidth": 1,
+                        "fillOpacity": 8,
+                        "showPoints": "never"
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "crashlooping": {
+            "kind": "Panel",
+            "spec": {
+              "id": 14,
+              "title": "CrashLooping Containers",
+              "description": "Containers seen in CrashLoopBackOff in the last 5 minutes. A lookback rather than an instant read, because a crashlooping container spends part of each cycle Running and an instant query catches it only sometimes.",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "${ds}"
+                          },
+                          "spec": {
+                            "expr": "count(max_over_time(kube_pod_container_status_waiting_reason{job=\"kube-state-metrics\",reason=\"CrashLoopBackOff\"}[5m]) == 1) or (0 * sum(kube_node_info{job=\"kube-state-metrics\"}))",
+                            "legendFormat": "CrashLooping",
+                            "range": true
+                          }
+                        },
+                        "refId": "query-0",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "stat",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "graphMode": "area",
+                    "colorMode": "value",
+                    "justifyMode": "auto",
+                    "textMode": "auto",
+                    "wideLayout": true,
+                    "showPercentChange": false,
+                    "reduceOptions": {
+                      "values": false,
+                      "calcs": [
+                        "lastNotNull"
+                      ]
+                    },
+                    "percentChangeColorMode": "standard",
+                    "orientation": ""
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "short",
+                      "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                          {
+                            "value": null,
+                            "color": "green"
+                          },
+                          {
+                            "value": 1,
+                            "color": "red"
+                          }
+                        ]
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "deployments-unavailable": {
+            "kind": "Panel",
+            "spec": {
+              "id": 12,
+              "title": "Deployments Degraded",
+              "description": "Deployments with at least one replica unavailable. Uses the unavailable-replicas metric rather than comparing desired against ready, because a Deployment with zero ready pods can be missing its ready series entirely — the worst case would otherwise not register.",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "${ds}"
+                          },
+                          "spec": {
+                            "expr": "count(kube_deployment_status_replicas_unavailable{job=\"kube-state-metrics\"} \u003e 0) or (0 * sum(kube_node_info{job=\"kube-state-metrics\"}))",
+                            "legendFormat": "Degraded",
+                            "range": true
+                          }
+                        },
+                        "refId": "query-0",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "stat",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "graphMode": "area",
+                    "colorMode": "value",
+                    "justifyMode": "auto",
+                    "textMode": "auto",
+                    "wideLayout": true,
+                    "showPercentChange": false,
+                    "reduceOptions": {
+                      "values": false,
+                      "calcs": [
+                        "lastNotNull"
+                      ]
+                    },
+                    "percentChangeColorMode": "standard",
+                    "orientation": ""
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "short",
+                      "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                          {
+                            "value": null,
+                            "color": "green"
+                          },
+                          {
+                            "value": 1,
+                            "color": "red"
+                          }
+                        ]
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "memory-requests": {
+            "kind": "Panel",
+            "spec": {
+              "id": 6,
+              "title": "Memory Requests vs Allocatable",
+              "description": "Memory requested by running pods, as a fraction of allocatable memory. Measures scheduling headroom, not physical headroom: this is a Kind cluster whose nodes share one host, so summed allocatable reports the host's capacity once per node. The scheduler really does decide per node, so this number governs whether the next pod schedules — it does not tell you whether the host will cope.",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "${ds}"
+                          },
+                          "spec": {
+                            "expr": "sum(kube_pod_container_resource_requests{job=\"kube-state-metrics\",resource=\"memory\"} * on (exported_namespace, exported_pod) group_left () (max by (exported_namespace, exported_pod) (kube_pod_status_phase{job=\"kube-state-metrics\",phase=\"Running\"}) == 1)) / (sum(kube_node_status_allocatable{job=\"kube-state-metrics\",resource=\"memory\"}) \u003e 0)",
+                            "legendFormat": "Memory",
+                            "range": true
+                          }
+                        },
+                        "refId": "query-0",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "gauge",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "showThresholdLabels": false,
+                    "showThresholdMarkers": true,
+                    "sizing": "auto",
+                    "minVizWidth": 75,
+                    "reduceOptions": {
+                      "values": false,
+                      "calcs": [
+                        "lastNotNull"
+                      ]
+                    },
+                    "minVizHeight": 75,
+                    "orientation": ""
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "percentunit",
+                      "min": 0,
+                      "max": 1,
+                      "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                          {
+                            "value": null,
+                            "color": "green"
+                          },
+                          {
+                            "value": 0.7,
+                            "color": "yellow"
+                          },
+                          {
+                            "value": 0.85,
+                            "color": "red"
+                          }
+                        ]
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "memory-requests-per-node": {
+            "kind": "Panel",
+            "spec": {
+              "id": 9,
+              "title": "Memory Requests vs Allocatable by Node",
+              "description": "Memory equivalent of the CPU panel beside it, with the same caveat: scheduling headroom, not physical headroom.",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "${ds}"
+                          },
+                          "spec": {
+                            "expr": "sum by (node) (kube_pod_container_resource_requests{job=\"kube-state-metrics\",resource=\"memory\"} * on (exported_namespace, exported_pod) group_left () (max by (exported_namespace, exported_pod) (kube_pod_status_phase{job=\"kube-state-metrics\",phase=\"Running\"}) == 1)) / (sum by (node) (kube_node_status_allocatable{job=\"kube-state-metrics\",resource=\"memory\"}) \u003e 0)",
+                            "legendFormat": "{{node}}",
+                            "range": true
+                          }
+                        },
+                        "refId": "query-0",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "timeseries",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "legend": {
+                      "displayMode": "list",
+                      "placement": "bottom",
+                      "showLegend": true,
+                      "calcs": []
+                    },
+                    "tooltip": {
+                      "mode": "multi",
+                      "sort": "desc"
+                    }
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "percentunit",
+                      "min": 0,
+                      "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                          {
+                            "value": null,
+                            "color": "green"
+                          },
+                          {
+                            "value": 0.7,
+                            "color": "yellow"
+                          },
+                          {
+                            "value": 0.85,
+                            "color": "red"
+                          }
+                        ]
+                      },
+                      "custom": {
+                        "gradientMode": "none",
+                        "lineWidth": 1,
+                        "fillOpacity": 8,
+                        "showPoints": "never"
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "network-drops": {
+            "kind": "Panel",
+            "spec": {
+              "id": 22,
+              "title": "Packets Dropped by Namespace",
+              "description": "Packets dropped per second — queueing or conntrack pressure that the bandwidth panel hides. Transmit is drawn below the axis, matching the I/O panel.",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "${ds}"
+                          },
+                          "spec": {
+                            "expr": "sum by (namespace) (rate(container_network_receive_packets_dropped_total{job=\"kubelet\",namespace=~\"$namespace\",namespace!=\"\"}[$__rate_interval]))",
+                            "legendFormat": "RX {{namespace}}",
+                            "range": true
+                          }
+                        },
+                        "refId": "query-0",
+                        "hidden": false
+                      }
+                    },
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "${ds}"
+                          },
+                          "spec": {
+                            "expr": "sum by (namespace) (rate(container_network_transmit_packets_dropped_total{job=\"kubelet\",namespace=~\"$namespace\",namespace!=\"\"}[$__rate_interval]))",
+                            "legendFormat": "TX {{namespace}}",
+                            "range": true
+                          }
+                        },
+                        "refId": "query-1",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "timeseries",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "legend": {
+                      "displayMode": "list",
+                      "placement": "bottom",
+                      "showLegend": true,
+                      "calcs": []
+                    },
+                    "tooltip": {
+                      "mode": "multi",
+                      "sort": "desc"
+                    }
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "short",
+                      "custom": {
+                        "gradientMode": "none",
+                        "lineWidth": 1,
+                        "fillOpacity": 8,
+                        "showPoints": "never"
+                      }
+                    },
+                    "overrides": [
+                      {
+                        "matcher": {
+                          "id": "byRegexp",
+                          "options": "TX.*"
+                        },
+                        "properties": [
+                          {
+                            "id": "custom.transform",
+                            "value": "negative-Y"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "network-io": {
+            "kind": "Panel",
+            "spec": {
+              "id": 21,
+              "title": "Network I/O by Namespace",
+              "description": "Pod network throughput. Transmit is drawn below the axis so the two directions can be read against each other rather than summed by eye.",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "${ds}"
+                          },
+                          "spec": {
+                            "expr": "sum by (namespace) (rate(container_network_receive_bytes_total{job=\"kubelet\",namespace=~\"$namespace\",namespace!=\"\"}[$__rate_interval]))",
+                            "legendFormat": "RX {{namespace}}",
+                            "range": true
+                          }
+                        },
+                        "refId": "query-0",
+                        "hidden": false
+                      }
+                    },
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "${ds}"
+                          },
+                          "spec": {
+                            "expr": "sum by (namespace) (rate(container_network_transmit_bytes_total{job=\"kubelet\",namespace=~\"$namespace\",namespace!=\"\"}[$__rate_interval]))",
+                            "legendFormat": "TX {{namespace}}",
+                            "range": true
+                          }
+                        },
+                        "refId": "query-1",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "timeseries",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "legend": {
+                      "displayMode": "list",
+                      "placement": "bottom",
+                      "showLegend": true,
+                      "calcs": []
+                    },
+                    "tooltip": {
+                      "mode": "multi",
+                      "sort": "desc"
+                    }
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "Bps",
+                      "custom": {
+                        "gradientMode": "none",
+                        "lineWidth": 1,
+                        "fillOpacity": 8,
+                        "showPoints": "never"
+                      }
+                    },
+                    "overrides": [
+                      {
+                        "matcher": {
+                          "id": "byRegexp",
+                          "options": "TX.*"
+                        },
+                        "properties": [
+                          {
+                            "id": "custom.transform",
+                            "value": "negative-Y"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "node-pressure": {
+            "kind": "Panel",
+            "spec": {
+              "id": 10,
+              "title": "Node Pressure Conditions",
+              "description": "Memory, disk and PID pressure conditions currently true, by node. Flat at zero is the healthy state.",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "${ds}"
+                          },
+                          "spec": {
+                            "expr": "sum by (node, condition) (kube_node_status_condition{job=\"kube-state-metrics\",condition=~\"MemoryPressure|DiskPressure|PIDPressure\",status=\"true\"})",
+                            "legendFormat": "{{node}} · {{condition}}",
+                            "range": true
+                          }
+                        },
+                        "refId": "query-0",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "timeseries",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "legend": {
+                      "displayMode": "list",
+                      "placement": "bottom",
+                      "showLegend": true,
+                      "calcs": []
+                    },
+                    "tooltip": {
+                      "mode": "multi",
+                      "sort": "desc"
+                    }
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "short",
+                      "custom": {
+                        "gradientMode": "none",
+                        "lineWidth": 1,
+                        "fillOpacity": 8,
+                        "showPoints": "never"
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "nodes-ready": {
+            "kind": "Panel",
+            "spec": {
+              "id": 1,
+              "title": "Nodes Ready",
+              "description": "Nodes reporting Ready. Counts readiness rather than existence, so a node going NotReady moves this number — count(kube_node_info) would not.",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "${ds}"
+                          },
+                          "spec": {
+                            "expr": "sum(kube_node_status_condition{job=\"kube-state-metrics\",condition=\"Ready\",status=\"true\"})",
+                            "legendFormat": "Ready",
+                            "range": true
+                          }
+                        },
+                        "refId": "query-0",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "stat",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "graphMode": "area",
+                    "colorMode": "value",
+                    "justifyMode": "auto",
+                    "textMode": "auto",
+                    "wideLayout": true,
+                    "showPercentChange": false,
+                    "reduceOptions": {
+                      "values": false,
+                      "calcs": [
+                        "lastNotNull"
+                      ]
+                    },
+                    "percentChangeColorMode": "standard",
+                    "orientation": ""
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "short"
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "nodes-unschedulable": {
+            "kind": "Panel",
+            "spec": {
+              "id": 11,
+              "title": "Nodes Unschedulable",
+              "description": "Cordoned nodes. The series is one 0/1 gauge per node and always present, so this reads 0 with no anchor needed.",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "${ds}"
+                          },
+                          "spec": {
+                            "expr": "sum(kube_node_spec_unschedulable{job=\"kube-state-metrics\"})",
+                            "legendFormat": "Cordoned",
+                            "range": true
+                          }
+                        },
+                        "refId": "query-0",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "stat",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "graphMode": "area",
+                    "colorMode": "value",
+                    "justifyMode": "auto",
+                    "textMode": "auto",
+                    "wideLayout": true,
+                    "showPercentChange": false,
+                    "reduceOptions": {
+                      "values": false,
+                      "calcs": [
+                        "lastNotNull"
+                      ]
+                    },
+                    "percentChangeColorMode": "standard",
+                    "orientation": ""
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "short",
+                      "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                          {
+                            "value": null,
+                            "color": "green"
+                          },
+                          {
+                            "value": 1,
+                            "color": "yellow"
+                          }
+                        ]
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "oom-killed": {
+            "kind": "Panel",
+            "spec": {
+              "id": 15,
+              "title": "Containers OOMKilled (1h)",
+              "description": "Containers whose most recent termination was an OOM kill, in the last hour. This is a count of containers in that state, not a count of OOM events — the underlying metric is a 0/1 gauge and cannot answer the latter.",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "${ds}"
+                          },
+                          "spec": {
+                            "expr": "count(max_over_time(kube_pod_container_status_last_terminated_reason{job=\"kube-state-metrics\",reason=\"OOMKilled\"}[1h]) == 1) or (0 * sum(kube_node_info{job=\"kube-state-metrics\"}))",
+                            "legendFormat": "OOMKilled",
+                            "range": true
+                          }
+                        },
+                        "refId": "query-0",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "stat",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "graphMode": "area",
+                    "colorMode": "value",
+                    "justifyMode": "auto",
+                    "textMode": "auto",
+                    "wideLayout": true,
+                    "showPercentChange": false,
+                    "reduceOptions": {
+                      "values": false,
+                      "calcs": [
+                        "lastNotNull"
+                      ]
+                    },
+                    "percentChangeColorMode": "standard",
+                    "orientation": ""
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "short",
+                      "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                          {
+                            "value": null,
+                            "color": "green"
+                          },
+                          {
+                            "value": 1,
+                            "color": "red"
+                          }
+                        ]
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "pod-phases": {
+            "kind": "Panel",
+            "spec": {
+              "id": 17,
+              "title": "Pods by Phase and Namespace",
+              "description": "",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "${ds}"
+                          },
+                          "spec": {
+                            "expr": "label_replace(sum by (exported_namespace, phase) (kube_pod_status_phase{job=\"kube-state-metrics\",exported_namespace=~\"$namespace\"}), \"namespace\", \"$1\", \"exported_namespace\", \"(.*)\")",
+                            "legendFormat": "{{namespace}} · {{phase}}",
+                            "range": true
+                          }
+                        },
+                        "refId": "query-0",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "timeseries",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "legend": {
+                      "displayMode": "list",
+                      "placement": "bottom",
+                      "showLegend": true,
+                      "calcs": []
+                    },
+                    "tooltip": {
+                      "mode": "multi",
+                      "sort": "desc"
+                    }
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "short",
+                      "custom": {
+                        "gradientMode": "none",
+                        "lineWidth": 1,
+                        "fillOpacity": 8,
+                        "showPoints": "never",
+                        "stacking": {
+                          "mode": "normal"
+                        }
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "pod-restarts": {
+            "kind": "Panel",
+            "spec": {
+              "id": 16,
+              "title": "Container Restarts by Namespace",
+              "description": "Container restarts per second. A rate rather than an increase over the dashboard range, so the graph shows when restarts happened rather than a flat total.",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "${ds}"
+                          },
+                          "spec": {
+                            "expr": "label_replace(sum by (exported_namespace) (rate(kube_pod_container_status_restarts_total{job=\"kube-state-metrics\",exported_namespace=~\"$namespace\"}[$__rate_interval])), \"namespace\", \"$1\", \"exported_namespace\", \"(.*)\")",
+                            "legendFormat": "{{namespace}}",
+                            "range": true
+                          }
+                        },
+                        "refId": "query-0",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "timeseries",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "legend": {
+                      "displayMode": "list",
+                      "placement": "bottom",
+                      "showLegend": true,
+                      "calcs": []
+                    },
+                    "tooltip": {
+                      "mode": "multi",
+                      "sort": "desc"
+                    }
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "short",
+                      "custom": {
+                        "gradientMode": "none",
+                        "lineWidth": 1,
+                        "fillOpacity": 8,
+                        "showPoints": "never"
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "pods-failed": {
+            "kind": "Panel",
+            "spec": {
+              "id": 4,
+              "title": "Failed Pods",
+              "description": "",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "${ds}"
+                          },
+                          "spec": {
+                            "expr": "sum(kube_pod_status_phase{job=\"kube-state-metrics\",phase=\"Failed\"})",
+                            "legendFormat": "Failed",
+                            "range": true
+                          }
+                        },
+                        "refId": "query-0",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "stat",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "graphMode": "area",
+                    "colorMode": "value",
+                    "justifyMode": "auto",
+                    "textMode": "auto",
+                    "wideLayout": true,
+                    "showPercentChange": false,
+                    "reduceOptions": {
+                      "values": false,
+                      "calcs": [
+                        "lastNotNull"
+                      ]
+                    },
+                    "percentChangeColorMode": "standard",
+                    "orientation": ""
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "short",
+                      "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                          {
+                            "value": null,
+                            "color": "green"
+                          },
+                          {
+                            "value": 1,
+                            "color": "red"
+                          }
+                        ]
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "pods-pending": {
+            "kind": "Panel",
+            "spec": {
+              "id": 3,
+              "title": "Pending Pods",
+              "description": "Pods waiting to be scheduled. A steady non-zero value usually means no node can satisfy the requests — compare against the allocatable gauges.",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "${ds}"
+                          },
+                          "spec": {
+                            "expr": "sum(kube_pod_status_phase{job=\"kube-state-metrics\",phase=\"Pending\"})",
+                            "legendFormat": "Pending",
+                            "range": true
+                          }
+                        },
+                        "refId": "query-0",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "stat",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "graphMode": "area",
+                    "colorMode": "value",
+                    "justifyMode": "auto",
+                    "textMode": "auto",
+                    "wideLayout": true,
+                    "showPercentChange": false,
+                    "reduceOptions": {
+                      "values": false,
+                      "calcs": [
+                        "lastNotNull"
+                      ]
+                    },
+                    "percentChangeColorMode": "standard",
+                    "orientation": ""
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "short",
+                      "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                          {
+                            "value": null,
+                            "color": "green"
+                          },
+                          {
+                            "value": 1,
+                            "color": "yellow"
+                          }
+                        ]
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "pods-per-node": {
+            "kind": "Panel",
+            "spec": {
+              "id": 7,
+              "title": "Pods per Node",
+              "description": "Scheduled pods against each node's allocatable pod slots.",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "${ds}"
+                          },
+                          "spec": {
+                            "expr": "count by (node) (kube_pod_info{job=\"kube-state-metrics\"})",
+                            "legendFormat": "{{node}}",
+                            "range": true
+                          }
+                        },
+                        "refId": "query-0",
+                        "hidden": false
+                      }
+                    },
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "${ds}"
+                          },
+                          "spec": {
+                            "expr": "sum by (node) (kube_node_status_allocatable{job=\"kube-state-metrics\",resource=\"pods\"})",
+                            "legendFormat": "capacity {{node}}",
+                            "range": true
+                          }
+                        },
+                        "refId": "query-1",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "timeseries",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "legend": {
+                      "displayMode": "list",
+                      "placement": "bottom",
+                      "showLegend": true,
+                      "calcs": []
+                    },
+                    "tooltip": {
+                      "mode": "multi",
+                      "sort": "desc"
+                    }
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "short",
+                      "custom": {
+                        "gradientMode": "none",
+                        "lineWidth": 1,
+                        "fillOpacity": 8,
+                        "showPoints": "never"
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "pods-running": {
+            "kind": "Panel",
+            "spec": {
+              "id": 2,
+              "title": "Running Pods",
+              "description": "",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "${ds}"
+                          },
+                          "spec": {
+                            "expr": "sum(kube_pod_status_phase{job=\"kube-state-metrics\",phase=\"Running\"})",
+                            "legendFormat": "Running",
+                            "range": true
+                          }
+                        },
+                        "refId": "query-0",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "stat",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "graphMode": "area",
+                    "colorMode": "value",
+                    "justifyMode": "auto",
+                    "textMode": "auto",
+                    "wideLayout": true,
+                    "showPercentChange": false,
+                    "reduceOptions": {
+                      "values": false,
+                      "calcs": [
+                        "lastNotNull"
+                      ]
+                    },
+                    "percentChangeColorMode": "standard",
+                    "orientation": ""
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "short"
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          },
+          "statefulsets-unavailable": {
+            "kind": "Panel",
+            "spec": {
+              "id": 13,
+              "title": "StatefulSets Degraded",
+              "description": "StatefulSets with fewer ready replicas than desired. The ready count is defaulted to zero when its series is absent, for the same reason as the Deployments panel.",
+              "links": [],
+              "data": {
+                "kind": "QueryGroup",
+                "spec": {
+                  "queries": [
+                    {
+                      "kind": "PanelQuery",
+                      "spec": {
+                        "query": {
+                          "kind": "DataQuery",
+                          "group": "prometheus",
+                          "version": "v0",
+                          "datasource": {
+                            "name": "${ds}"
+                          },
+                          "spec": {
+                            "expr": "count((kube_statefulset_status_replicas{job=\"kube-state-metrics\"} - (kube_statefulset_status_replicas_ready{job=\"kube-state-metrics\"} or kube_statefulset_status_replicas{job=\"kube-state-metrics\"} * 0)) \u003e 0) or (0 * sum(kube_node_info{job=\"kube-state-metrics\"}))",
+                            "legendFormat": "Degraded",
+                            "range": true
+                          }
+                        },
+                        "refId": "query-0",
+                        "hidden": false
+                      }
+                    }
+                  ],
+                  "transformations": [],
+                  "queryOptions": {}
+                }
+              },
+              "vizConfig": {
+                "kind": "VizConfig",
+                "group": "stat",
+                "version": "",
+                "spec": {
+                  "options": {
+                    "graphMode": "area",
+                    "colorMode": "value",
+                    "justifyMode": "auto",
+                    "textMode": "auto",
+                    "wideLayout": true,
+                    "showPercentChange": false,
+                    "reduceOptions": {
+                      "values": false,
+                      "calcs": [
+                        "lastNotNull"
+                      ]
+                    },
+                    "percentChangeColorMode": "standard",
+                    "orientation": ""
+                  },
+                  "fieldConfig": {
+                    "defaults": {
+                      "unit": "short",
+                      "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                          {
+                            "value": null,
+                            "color": "green"
+                          },
+                          {
+                            "value": 1,
+                            "color": "red"
+                          }
+                        ]
+                      }
+                    },
+                    "overrides": []
+                  }
+                }
+              }
+            }
+          }
+        },
+        "layout": {
+          "kind": "RowsLayout",
+          "spec": {
+            "rows": [
+              {
+                "kind": "RowsLayoutRow",
+                "spec": {
+                  "title": "Cluster",
+                  "layout": {
+                    "kind": "GridLayout",
+                    "spec": {
+                      "items": [
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 0,
+                            "y": 0,
+                            "width": 4,
+                            "height": 4,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "nodes-ready"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 4,
+                            "y": 0,
+                            "width": 4,
+                            "height": 4,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "pods-running"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 8,
+                            "y": 0,
+                            "width": 4,
+                            "height": 4,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "pods-pending"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 12,
+                            "y": 0,
+                            "width": 4,
+                            "height": 4,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "pods-failed"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 16,
+                            "y": 0,
+                            "width": 4,
+                            "height": 4,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "cpu-requests"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 20,
+                            "y": 0,
+                            "width": 4,
+                            "height": 4,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "memory-requests"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "kind": "RowsLayoutRow",
+                "spec": {
+                  "title": "Nodes",
+                  "layout": {
+                    "kind": "GridLayout",
+                    "spec": {
+                      "items": [
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 0,
+                            "y": 0,
+                            "width": 8,
+                            "height": 8,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "pods-per-node"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 8,
+                            "y": 0,
+                            "width": 8,
+                            "height": 8,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "cpu-requests-per-node"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 16,
+                            "y": 0,
+                            "width": 8,
+                            "height": 8,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "memory-requests-per-node"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 0,
+                            "y": 8,
+                            "width": 18,
+                            "height": 6,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "node-pressure"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 18,
+                            "y": 8,
+                            "width": 6,
+                            "height": 6,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "nodes-unschedulable"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "kind": "RowsLayoutRow",
+                "spec": {
+                  "title": "Workload health",
+                  "layout": {
+                    "kind": "GridLayout",
+                    "spec": {
+                      "items": [
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 0,
+                            "y": 0,
+                            "width": 6,
+                            "height": 4,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "deployments-unavailable"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 6,
+                            "y": 0,
+                            "width": 6,
+                            "height": 4,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "statefulsets-unavailable"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 12,
+                            "y": 0,
+                            "width": 6,
+                            "height": 4,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "crashlooping"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 18,
+                            "y": 0,
+                            "width": 6,
+                            "height": 4,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "oom-killed"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 0,
+                            "y": 4,
+                            "width": 12,
+                            "height": 8,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "pod-restarts"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 12,
+                            "y": 4,
+                            "width": 12,
+                            "height": 8,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "pod-phases"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "kind": "RowsLayoutRow",
+                "spec": {
+                  "title": "Resource usage",
+                  "layout": {
+                    "kind": "GridLayout",
+                    "spec": {
+                      "items": [
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 0,
+                            "y": 0,
+                            "width": 8,
+                            "height": 8,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "container-cpu"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 8,
+                            "y": 0,
+                            "width": 8,
+                            "height": 8,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "container-memory"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 16,
+                            "y": 0,
+                            "width": 8,
+                            "height": 8,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "cpu-throttling"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "kind": "RowsLayoutRow",
+                "spec": {
+                  "title": "Networking",
+                  "layout": {
+                    "kind": "GridLayout",
+                    "spec": {
+                      "items": [
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 0,
+                            "y": 0,
+                            "width": 12,
+                            "height": 8,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "network-io"
+                            }
+                          }
+                        },
+                        {
+                          "kind": "GridLayoutItem",
+                          "spec": {
+                            "x": 12,
+                            "y": 0,
+                            "width": 12,
+                            "height": 8,
+                            "element": {
+                              "kind": "ElementReference",
+                              "name": "network-drops"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "links": [
+          {
+            "title": "Generated from code — edits here are overwritten",
+            "type": "link",
+            "icon": "code-branch",
+            "tooltip": "",
+            "url": "https://github.com/duynhlab/obs-as-code",
+            "tags": [],
+            "asDropdown": false,
+            "targetBlank": true,
+            "includeVars": false,
+            "keepTime": false
+          },
+          {
+            "title": "Workloads drill-down",
+            "type": "link",
+            "icon": "dashboard",
+            "tooltip": "",
+            "url": "/d/kubernetes-workloads",
+            "tags": [],
+            "asDropdown": false,
+            "targetBlank": false,
+            "includeVars": false,
+            "keepTime": false
+          }
+        ],
+        "preload": false,
+        "tags": [
+          "obs-as-code",
+          "owner:platform",
+          "kubernetes",
+          "cluster"
+        ],
+        "timeSettings": {
+          "timezone": "browser",
+          "from": "now-6h",
+          "to": "now",
+          "autoRefresh": "1m",
+          "autoRefreshIntervals": [
+            "30s",
+            "1m",
+            "5m",
+            "15m",
+            "1h"
+          ],
+          "hideTimepicker": false,
+          "fiscalYearStartMonth": 0
+        },
+        "title": "Kubernetes Cluster Overview",
+        "variables": [
+          {
+            "kind": "DatasourceVariable",
+            "spec": {
+              "name": "ds",
+              "pluginId": "prometheus",
+              "refresh": "never",
+              "regex": "",
+              "current": {
+                "text": "VictoriaMetrics (Prometheus)",
+                "value": "VictoriaMetrics (Prometheus)"
+              },
+              "options": [],
+              "multi": false,
+              "includeAll": false,
+              "label": "Datasource",
+              "hide": "dontHide",
+              "skipUrlSync": false,
+              "allowCustomValue": false
+            }
+          },
+          {
+            "kind": "QueryVariable",
+            "spec": {
+              "name": "namespace",
+              "current": {
+                "text": "",
+                "value": ""
+              },
+              "label": "Namespace",
+              "hide": "dontHide",
+              "refresh": "onTimeRangeChanged",
+              "skipUrlSync": false,
+              "query": {
+                "kind": "DataQuery",
+                "group": "prometheus",
+                "version": "v0",
+                "datasource": {
+                  "name": "${ds}"
+                },
+                "spec": {
+                  "expr": "label_values(kube_pod_info, exported_namespace)"
+                }
+              },
+              "regex": "",
+              "regexApplyTo": "value",
+              "sort": "alphabeticalAsc",
+              "options": [],
+              "multi": true,
+              "includeAll": true,
+              "allowCustomValue": true
+            }
+          }
+        ]
+      }
+    }
+  }
+}

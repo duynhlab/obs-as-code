@@ -1,12 +1,19 @@
-// Package catalog is the single place that compiles resources into the binary.
-//
-// Every dashboard package is imported here for its registration side effect, and
-// nothing else imports them. Adding a board is one new file plus one line here,
-// and the conformance suite and the generator see exactly the same set — a board
-// cannot be tested but not shipped, or shipped but not tested.
+// Package catalog explicitly composes every dashboard domain.
 package catalog
 
 import (
-	_ "github.com/duynhlab/obs-as-code/internal/dashboards/example"
-	_ "github.com/duynhlab/obs-as-code/internal/dashboards/kubernetes"
+	"github.com/duynhlab/obs-as-code/internal/dashboards/example"
+	"github.com/duynhlab/obs-as-code/internal/dashboards/kubernetes"
+	"github.com/duynhlab/obs-as-code/internal/registry"
 )
+
+var dashboards = registry.MustNew(append(example.Dashboards(), kubernetes.Dashboards()...)...)
+
+// All returns every dashboard, including non-deployable examples.
+func All() []registry.Dashboard { return dashboards.All() }
+
+// Published returns every dashboard written as raw V2 JSON.
+func Published() []registry.Dashboard { return dashboards.Published() }
+
+// Deployable returns dashboards wrapped for GrafanaManifest delivery.
+func Deployable() []registry.Dashboard { return dashboards.Deployable() }

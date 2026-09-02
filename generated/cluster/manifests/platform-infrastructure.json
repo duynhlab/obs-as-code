@@ -1,0 +1,30 @@
+{
+  "apiVersion": "grafana.integreatly.org/v1beta1",
+  "kind": "GrafanaManifest",
+  "metadata": {
+    "name": "platform-infrastructure-folder",
+    "namespace": "monitoring",
+    "labels": {
+      "app.kubernetes.io/managed-by": "obs-as-code"
+    }
+  },
+  "spec": {
+    "instanceSelector": {
+      "matchLabels": {
+        "dashboards": "grafana"
+      }
+    },
+    "resyncPeriod": "10m",
+    "template": {
+      "apiVersion": "folder.grafana.app/v1",
+      "kind": "Folder",
+      "metadata": {
+        "name": "platform-infrastructure",
+        "namespace": "default"
+      },
+      "spec": {
+        "title": "Platform / Infrastructure"
+      }
+    }
+  }
+}

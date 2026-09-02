@@ -1,16 +1,4 @@
-// Package check holds the conformance rules every generated resource must
-// satisfy.
-//
-// The rules run against the rendered JSON rather than against the Go models that
-// produced it. That costs an unmarshal and buys two things: the rules validate
-// what actually ships, and they keep working when the Foundation SDK — which is
-// public preview and says so — reshapes a type.
-//
-// Every rule here exists because something went wrong before. Overlapping grid
-// positions and duplicate refIds are both commits in the history of the repo
-// this replaces; the label rules are RFC-0017 made executable; the datasource
-// rule is the four hardcoded UIDs found across the twenty-one hand-written
-// boards.
+// Package check validates the rendered resources that are actually shipped.
 package check
 
 import (
@@ -23,24 +11,15 @@ import (
 	"github.com/duynhlab/obs-as-code/internal/promql"
 )
 
-// Violation is one broken rule.
+// Violation is one broken conformance rule.
 type Violation struct {
-	// Resource is the UID of the resource at fault.
 	Resource string
-
-	// Rule is the short, stable identifier of the rule, so a failure can be
-	// grepped for and a suppression discussed by name.
-	Rule string
-
-	// Detail says what is wrong and, where it is not obvious, what to do.
-	Detail string
+	Rule     string
+	Detail   string
 }
 
-func (v Violation) String() string {
-	return fmt.Sprintf("%s: [%s] %s", v.Resource, v.Rule, v.Detail)
-}
+func (v Violation) String() string { return fmt.Sprintf("%s: [%s] %s", v.Resource, v.Rule, v.Detail) }
 
-// Rule identifiers.
 const (
 	RulePanelNoTarget   = "panel-no-target"
 	RulePanelNoTitle    = "panel-no-title"
@@ -54,238 +33,220 @@ const (
 	RuleDBNamespace     = "db-namespace"
 )
 
-// forbiddenLabels are the unbounded-cardinality labels RFC-0017 forbids. A
-// single one of these in a query can multiply a metric's series count by the
-// number of users or orders in the system; the SDK caps at 2000 attribute sets
-// per metric and then silently drops the rest, so the damage is invisible.
 var forbiddenLabels = []string{
-	"user_id", "userid",
-	"order_id", "orderid",
-	"session_id", "sessionid",
-	"payment_id", "paymentid",
-	"promo_code", "promocode",
-	"request_id", "requestid",
-	"trace_id", "traceid",
-	"email", "ip", "ip_address", "remote_addr",
+	"user_id", "userid", "order_id", "orderid", "session_id", "sessionid",
+	"payment_id", "paymentid", "promo_code", "promocode", "request_id", "requestid",
+	"trace_id", "traceid", "email", "ip", "ip_address", "remote_addr",
 }
 
-// board is the subset of the dashboard model the rules read.
-type board struct {
-	UID        string  `json:"uid"`
-	Title      string  `json:"title"`
-	Panels     []panel `json:"panels"`
-	Templating struct {
-		List []variable `json:"list"`
-	} `json:"templating"`
+// These small wire structs intentionally describe only the Dashboard V2 fields
+// the rules need. Checks stay coupled to the artifact, not public-preview SDK APIs.
+type dashboardResource struct {
+	APIVersion string `json:"apiVersion"`
+	Kind       string `json:"kind"`
+	Spec       struct {
+		Variables []variable         `json:"variables"`
+		Elements  map[string]element `json:"elements"`
+		Layout    layout             `json:"layout"`
+	} `json:"spec"`
 }
 
 type variable struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
+	Kind string `json:"kind"`
+	Spec struct {
+		Name     string `json:"name"`
+		PluginID string `json:"pluginId"`
+	} `json:"spec"`
 }
 
-type panel struct {
-	Type    string   `json:"type"`
-	Title   string   `json:"title"`
-	GridPos gridPos  `json:"gridPos"`
-	Targets []target `json:"targets"`
-	// Panels holds the children of a collapsed row.
-	Panels []panel `json:"panels"`
+type element struct {
+	Kind string `json:"kind"`
+	Spec struct {
+		Title string `json:"title"`
+		Data  struct {
+			Spec struct {
+				Queries []panelQuery `json:"queries"`
+			} `json:"spec"`
+		} `json:"data"`
+	} `json:"spec"`
 }
 
-type gridPos struct {
-	X int `json:"x"`
-	Y int `json:"y"`
-	W int `json:"w"`
-	H int `json:"h"`
+type panelQuery struct {
+	Spec struct {
+		RefID string `json:"refId"`
+		Query struct {
+			Group      string `json:"group"`
+			Datasource *struct {
+				Name string `json:"name"`
+			} `json:"datasource"`
+			Spec struct {
+				Expr string `json:"expr"`
+			} `json:"spec"`
+		} `json:"query"`
+	} `json:"spec"`
 }
 
-type target struct {
-	Expr       string `json:"expr"`
-	RefID      string `json:"refId"`
-	Datasource *struct {
-		Type string `json:"type"`
-		UID  string `json:"uid"`
-	} `json:"datasource"`
+type layout struct {
+	Spec struct {
+		Rows []struct {
+			Spec struct {
+				Layout layout `json:"layout"`
+			} `json:"spec"`
+		} `json:"rows"`
+		Items []gridItem `json:"items"`
+	} `json:"spec"`
 }
 
-// Dashboard runs every dashboard rule against a rendered model.
+type gridItem struct {
+	Spec struct {
+		X       int `json:"x"`
+		Y       int `json:"y"`
+		Width   int `json:"width"`
+		Height  int `json:"height"`
+		Element struct {
+			Name string `json:"name"`
+		} `json:"element"`
+	} `json:"spec"`
+}
+
+// Dashboard runs every rule against a rendered Dashboard V2 resource.
 func Dashboard(uid string, model []byte) []Violation {
-	var b board
-	if err := json.Unmarshal(model, &b); err != nil {
-		return []Violation{{Resource: uid, Rule: RuleQuerySyntax, Detail: "model is not valid JSON: " + err.Error()}}
+	var board dashboardResource
+	if err := json.Unmarshal(model, &board); err != nil {
+		return []Violation{{Resource: uid, Rule: RuleQuerySyntax, Detail: "resource is not valid JSON: " + err.Error()}}
+	}
+	if board.APIVersion != "dashboard.grafana.app/v2" || board.Kind != "Dashboard" {
+		return []Violation{{Resource: uid, Rule: RuleQuerySyntax, Detail: fmt.Sprintf("want dashboard.grafana.app/v2 Dashboard, got %q %q", board.APIVersion, board.Kind)}}
 	}
 
+	datasources := make(map[string]string)
+	for _, variable := range board.Spec.Variables {
+		if variable.Kind == "DatasourceVariable" && variable.Spec.Name != "" {
+			datasources["${"+variable.Spec.Name+"}"] = variable.Spec.PluginID
+		}
+	}
 	var out []Violation
-	out = append(out, checkDatasourceVariable(uid, b)...)
-	out = append(out, checkPanels(uid, flatten(b.Panels))...)
-	out = append(out, checkGrid(uid, flatten(b.Panels))...)
+	if len(datasources) == 0 {
+		out = append(out, Violation{Resource: uid, Rule: RuleNoDatasourceVar, Detail: "board declares no DatasourceVariable; build it with common.NewDashboard"})
+	}
+
+	keys := make([]string, 0, len(board.Spec.Elements))
+	for key := range board.Spec.Elements {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	for _, key := range keys {
+		element := board.Spec.Elements[key]
+		if element.Kind == "Panel" {
+			out = append(out, checkPanel(uid, key, element, datasources)...)
+		}
+	}
+	return append(out, checkLayout(uid, board.Spec.Elements, board.Spec.Layout)...)
+}
+
+func checkPanel(uid, key string, panel element, datasources map[string]string) []Violation {
+	label := panel.Spec.Title
+	var out []Violation
+	if label == "" {
+		label = "(untitled " + key + ")"
+		out = append(out, Violation{Resource: uid, Rule: RulePanelNoTitle, Detail: fmt.Sprintf("panel element %q has no title", key)})
+	}
+	queries := panel.Spec.Data.Spec.Queries
+	if len(queries) == 0 {
+		return append(out, Violation{Resource: uid, Rule: RulePanelNoTarget, Detail: fmt.Sprintf("panel %q has no query, so it renders empty", label)})
+	}
+
+	seen := make(map[string]bool, len(queries))
+	for _, target := range queries {
+		if target.Spec.RefID != "" && seen[target.Spec.RefID] {
+			out = append(out, Violation{Resource: uid, Rule: RuleDuplicateRefID, Detail: fmt.Sprintf("panel %q has two targets with refId %q; Grafana silently drops one", label, target.Spec.RefID)})
+		}
+		seen[target.Spec.RefID] = true
+		out = append(out, checkTarget(uid, label, target, datasources)...)
+	}
 	return out
 }
 
-// flatten returns every panel including those nested inside collapsed rows, but
-// not the row panels themselves — a row legitimately has no query and no size.
-func flatten(panels []panel) []panel {
-	out := make([]panel, 0, len(panels))
-	for _, p := range panels {
-		if p.Type == "row" {
-			out = append(out, flatten(p.Panels)...)
-			continue
-		}
-		out = append(out, p)
+func checkTarget(uid, panelTitle string, target panelQuery, datasources map[string]string) []Violation {
+	query := target.Spec.Query
+	name := ""
+	if query.Datasource != nil {
+		name = query.Datasource.Name
 	}
-	return out
-}
-
-func checkDatasourceVariable(uid string, b board) []Violation {
-	for _, v := range b.Templating.List {
-		if v.Type == "datasource" {
-			return nil
-		}
-	}
-	// Panels reference the datasource as "${ds}". Without the variable that
-	// resolves to nothing and every panel renders empty — with no error.
-	return []Violation{{
-		Resource: uid,
-		Rule:     RuleNoDatasourceVar,
-		Detail:   "board declares no datasource variable; build it with common.NewDashboard",
-	}}
-}
-
-func checkPanels(uid string, panels []panel) []Violation {
+	plugin, declared := datasources[name]
 	var out []Violation
-
-	for _, p := range panels {
-		label := p.Title
-		if label == "" {
-			label = "(untitled " + p.Type + ")"
-			out = append(out, Violation{
-				Resource: uid, Rule: RulePanelNoTitle,
-				Detail: "a " + p.Type + " panel has no title",
-			})
-		}
-
-		if len(p.Targets) == 0 {
-			out = append(out, Violation{
-				Resource: uid, Rule: RulePanelNoTarget,
-				Detail: fmt.Sprintf("panel %q has no query, so it renders empty", label),
-			})
-			continue
-		}
-
-		seen := make(map[string]bool, len(p.Targets))
-		for _, t := range p.Targets {
-			// Two targets sharing a refId: Grafana keeps one and drops the
-			// other without reporting anything. This is a real commit in the
-			// previous repo's history.
-			if t.RefID != "" {
-				if seen[t.RefID] {
-					out = append(out, Violation{
-						Resource: uid, Rule: RuleDuplicateRefID,
-						Detail: fmt.Sprintf("panel %q has two targets with refId %q; Grafana silently drops one", label, t.RefID),
-					})
-				}
-				seen[t.RefID] = true
-			}
-
-			out = append(out, checkTarget(uid, label, t)...)
-		}
+	if !declared {
+		out = append(out, Violation{Resource: uid, Rule: RuleDatasourceRef, Detail: fmt.Sprintf("panel %q: datasource name is %q, want a declared variable reference like ${ds} from profile.MetricsRef()", panelTitle, name)})
+	} else if query.Group != "" && plugin != "" && query.Group != plugin {
+		out = append(out, Violation{Resource: uid, Rule: RuleDatasourceRef, Detail: fmt.Sprintf("panel %q: query group %q does not match datasource variable plugin %q", panelTitle, query.Group, plugin)})
 	}
 
-	return out
-}
-
-func checkTarget(uid, panelTitle string, t target) []Violation {
-	var out []Violation
-
-	if t.Datasource == nil || !strings.HasPrefix(t.Datasource.UID, "${") {
-		got := "absent"
-		if t.Datasource != nil {
-			got = t.Datasource.UID
-		}
-		out = append(out, Violation{
-			Resource: uid, Rule: RuleDatasourceRef,
-			Detail: fmt.Sprintf("panel %q: datasource uid is %q, want a variable reference like ${ds} — take it from profile.MetricsRef()", panelTitle, got),
-		})
-	}
-
-	if strings.TrimSpace(t.Expr) == "" {
+	expr := query.Spec.Expr
+	if strings.TrimSpace(expr) == "" {
 		return out
 	}
-
-	if err := promql.Check(t.Expr); err != nil {
-		out = append(out, Violation{
-			Resource: uid, Rule: RuleQuerySyntax,
-			Detail: fmt.Sprintf("panel %q: %v", panelTitle, err),
-		})
+	if err := promql.Check(expr); err != nil {
+		out = append(out, Violation{Resource: uid, Rule: RuleQuerySyntax, Detail: fmt.Sprintf("panel %q: %v", panelTitle, err)})
 	}
-	out = append(out, checkExprConventions(uid, panelTitle, t.Expr)...)
-
-	return out
+	return append(out, checkExprConventions(uid, panelTitle, expr)...)
 }
 
-// rateFamily matches a rate-style function applied to a literal range window.
 var rateFamily = regexp.MustCompile(`\b(rate|irate|increase|delta|deriv)\s*\([^)]*\[\s*\d+[smhdwy]\s*\]`)
-
-// dbQueryMetric matches semconv's database metric namespace.
 var dbQueryMetric = regexp.MustCompile(`\bdb_query_\w+`)
 
 func checkExprConventions(uid, panelTitle, expr string) []Violation {
 	var out []Violation
-
-	if m := rateFamily.FindString(expr); m != "" {
-		out = append(out, Violation{
-			Resource: uid, Rule: RuleRateInterval,
-			Detail: fmt.Sprintf("panel %q: %q uses a fixed range window; use $__rate_interval so the query still returns data when the panel is zoomed out", panelTitle, m),
-		})
+	if match := rateFamily.FindString(expr); match != "" {
+		out = append(out, Violation{Resource: uid, Rule: RuleRateInterval, Detail: fmt.Sprintf("panel %q: %q uses a fixed range window; use $__rate_interval", panelTitle, match)})
 	}
-
-	if m := dbQueryMetric.FindString(expr); m != "" {
-		out = append(out, Violation{
-			Resource: uid, Rule: RuleDBNamespace,
-			Detail: fmt.Sprintf("panel %q: %q is semconv's database namespace; RFC-0017 puts database metrics in pgx_*", panelTitle, m),
-		})
+	if match := dbQueryMetric.FindString(expr); match != "" {
+		out = append(out, Violation{Resource: uid, Rule: RuleDBNamespace, Detail: fmt.Sprintf("panel %q: %q is semconv's database namespace; RFC-0017 requires pgx_*", panelTitle, match)})
 	}
-
 	for _, label := range forbiddenLabels {
-		if !labelUsed(expr, label) {
-			continue
+		if labelUsed(expr, label) {
+			out = append(out, Violation{Resource: uid, Rule: RuleForbiddenLabel, Detail: fmt.Sprintf("panel %q: label %q has unbounded cardinality and RFC-0017 forbids it", panelTitle, label)})
 		}
-		out = append(out, Violation{
-			Resource: uid, Rule: RuleForbiddenLabel,
-			Detail: fmt.Sprintf("panel %q: label %q has unbounded cardinality and RFC-0017 forbids it", panelTitle, label),
-		})
 	}
-
 	return out
 }
 
-// labelUsed reports whether expr references label as a label name — in a
-// matcher, or in a by/without clause — rather than merely containing the word.
 func labelUsed(expr, label string) bool {
 	pattern := regexp.MustCompile(`\b` + regexp.QuoteMeta(label) + `\b\s*(=~|!~|=|!=)|\b(by|without)\s*\([^)]*\b` + regexp.QuoteMeta(label) + `\b`)
 	return pattern.MatchString(expr)
 }
 
-func checkGrid(uid string, panels []panel) []Violation {
+func checkLayout(uid string, elements map[string]element, root layout) []Violation {
 	var out []Violation
-
-	for i := range panels {
-		for j := i + 1; j < len(panels); j++ {
-			a, b := panels[i].GridPos, panels[j].GridPos
-			if a.W == 0 || a.H == 0 || b.W == 0 || b.H == 0 {
-				continue
+	references := make(map[string]int)
+	var walk func(layout)
+	walk = func(current layout) {
+		for _, row := range current.Spec.Rows {
+			walk(row.Spec.Layout)
+		}
+		items := current.Spec.Items
+		for i, item := range items {
+			s := item.Spec
+			references[s.Element.Name]++
+			if _, ok := elements[s.Element.Name]; !ok {
+				out = append(out, Violation{Resource: uid, Rule: RuleGridOverlap, Detail: fmt.Sprintf("layout references missing element %q", s.Element.Name)})
 			}
-			if a.X < b.X+b.W && b.X < a.X+a.W && a.Y < b.Y+b.H && b.Y < a.Y+a.H {
-				out = append(out, Violation{
-					Resource: uid, Rule: RuleGridOverlap,
-					Detail: fmt.Sprintf("panels %q and %q overlap at (%d,%d) and (%d,%d); set layout with .Span()/.Height() and let the SDK compute gridPos",
-						panels[i].Title, panels[j].Title, a.X, a.Y, b.X, b.Y),
-				})
+			if s.X < 0 || s.Y < 0 || s.Width < 1 || s.Height < 1 || s.X+s.Width > 24 {
+				out = append(out, Violation{Resource: uid, Rule: RuleGridOverlap, Detail: fmt.Sprintf("element %q has invalid grid position x=%d y=%d width=%d height=%d", s.Element.Name, s.X, s.Y, s.Width, s.Height)})
+			}
+			for j := i + 1; j < len(items); j++ {
+				a, b := s, items[j].Spec
+				if a.X < b.X+b.Width && b.X < a.X+a.Width && a.Y < b.Y+b.Height && b.Y < a.Y+a.Height {
+					out = append(out, Violation{Resource: uid, Rule: RuleGridOverlap, Detail: fmt.Sprintf("elements %q and %q overlap", a.Element.Name, b.Element.Name)})
+				}
 			}
 		}
 	}
-
+	walk(root)
+	for key, element := range elements {
+		if element.Kind == "Panel" && references[key] != 1 {
+			out = append(out, Violation{Resource: uid, Rule: RuleGridOverlap, Detail: fmt.Sprintf("panel element %q has %d layout references, want exactly one", key, references[key])})
+		}
+	}
 	return out
 }
 
@@ -294,12 +255,10 @@ func Format(violations []Violation) string {
 	if len(violations) == 0 {
 		return ""
 	}
-
 	lines := make([]string, 0, len(violations))
-	for _, v := range violations {
-		lines = append(lines, v.String())
+	for _, violation := range violations {
+		lines = append(lines, violation.String())
 	}
 	slices.Sort(lines)
-
 	return strings.Join(lines, "\n")
 }

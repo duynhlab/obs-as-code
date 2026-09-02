@@ -7,10 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	_ "github.com/duynhlab/obs-as-code/internal/catalog"
+	"github.com/duynhlab/obs-as-code/internal/catalog"
 	"github.com/duynhlab/obs-as-code/internal/check"
 	"github.com/duynhlab/obs-as-code/internal/profile"
-	"github.com/duynhlab/obs-as-code/internal/registry"
 )
 
 var update = flag.Bool("update", false, "rewrite golden files instead of comparing against them")
@@ -27,7 +26,7 @@ func profiles() []profile.Profile {
 func TestCatalogIsNotEmpty(t *testing.T) {
 	t.Parallel()
 
-	if len(registry.All()) == 0 {
+	if len(catalog.All()) == 0 {
 		t.Fatal("no dashboards registered; every conformance test below would pass vacuously")
 	}
 }
@@ -36,7 +35,7 @@ func TestEveryDashboardBuilds(t *testing.T) {
 	t.Parallel()
 
 	for _, p := range profiles() {
-		for _, d := range registry.All() {
+		for _, d := range catalog.All() {
 			t.Run(p.Name+"/"+d.UID, func(t *testing.T) {
 				t.Parallel()
 
@@ -56,7 +55,7 @@ func TestEveryDashboardObeysTheDashboardRules(t *testing.T) {
 	t.Parallel()
 
 	for _, p := range profiles() {
-		for _, d := range registry.All() {
+		for _, d := range catalog.All() {
 			t.Run(p.Name+"/"+d.UID, func(t *testing.T) {
 				t.Parallel()
 
@@ -83,7 +82,7 @@ func TestDashboardGoldenFiles(t *testing.T) {
 	t.Parallel()
 
 	for _, p := range profiles() {
-		for _, d := range registry.All() {
+		for _, d := range catalog.All() {
 			t.Run(p.Name+"/"+d.UID, func(t *testing.T) {
 				t.Parallel()
 
@@ -128,7 +127,7 @@ func TestRenderingIsDeterministic(t *testing.T) {
 	// Generated output is committed, so instability surfaces as a phantom diff on
 	// an unrelated pull request rather than as a failure here.
 	for _, p := range profiles() {
-		for _, d := range registry.All() {
+		for _, d := range catalog.All() {
 			t.Run(p.Name+"/"+d.UID, func(t *testing.T) {
 				t.Parallel()
 
@@ -156,7 +155,7 @@ func TestFilenamesAreUnique(t *testing.T) {
 	// would serve whichever won.
 	seen := make(map[string]string)
 
-	for _, d := range registry.All() {
+	for _, d := range catalog.All() {
 		if other, dup := seen[d.Filename()]; dup {
 			t.Errorf("%s and %s both write %s", other, d.UID, d.Filename())
 		}

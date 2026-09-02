@@ -2,11 +2,52 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestRunWritesV2DashboardsAndDeployableManifests(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "generated")
+	if err := run([]string{"-out", out}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+
+	raw := readJSON(t, filepath.Join(out, "cluster", "dashboards", "kubernetes-cluster-overview.json"))
+	if got, want := raw["apiVersion"], "dashboard.grafana.app/v2"; got != want {
+		t.Errorf("raw apiVersion = %v, want %q", got, want)
+	}
+	if got, want := raw["kind"], "Dashboard"; got != want {
+		t.Errorf("raw kind = %v, want %q", got, want)
+	}
+
+	manifest := readJSON(t, filepath.Join(out, "cluster", "manifests", "kubernetes-cluster-overview.json"))
+	if got, want := manifest["apiVersion"], "grafana.integreatly.org/v1beta1"; got != want {
+		t.Errorf("manifest apiVersion = %v, want %q", got, want)
+	}
+	if got, want := manifest["kind"], "GrafanaManifest"; got != want {
+		t.Errorf("manifest kind = %v, want %q", got, want)
+	}
+
+	if _, err := os.Stat(filepath.Join(out, "cluster", "manifests", "obs-as-code-example.json")); !os.IsNotExist(err) {
+		t.Errorf("example deployable manifest exists; example must remain build/test-only: %v", err)
+	}
+}
+
+func readJSON(t *testing.T, path string) map[string]any {
+	t.Helper()
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	var value map[string]any
+	if err := json.Unmarshal(body, &value); err != nil {
+		t.Fatalf("parse %s: %v", path, err)
+	}
+	return value
+}
 
 func TestRunWritesAndIsIdempotent(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "generated")

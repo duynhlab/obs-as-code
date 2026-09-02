@@ -1,72 +1,28 @@
-// Package profile describes everything a dashboard must not assume about the
-// Grafana instance and metrics backend it will be rendered for.
-//
-// Nothing outside this package may name a datasource UID or a datasource plugin
-// type. The cluster and the local-stack both expose a datasource with UID
-// "victoriametrics", but the cluster serves it through the VictoriaMetrics
-// plugin while the local-stack serves it as a plain Prometheus datasource — a
-// board that hardcoded either one would work in exactly one of the two places.
+// Package profile describes the Grafana and datasource facts that dashboard
+// code must not hardcode.
 package profile
 
 import (
 	"errors"
 	"fmt"
 	"slices"
-	"time"
 
-	"github.com/grafana/grafana-foundation-sdk/go/dashboard"
+	"github.com/grafana/grafana-foundation-sdk/go/dashboardv2"
 )
 
-// Profile is the set of environment facts a board is rendered against. It is
-// passed by value: a Profile is configuration, never shared mutable state.
+// Profile is the environment-specific input used to build a dashboard model.
+// Kubernetes delivery settings deliberately live outside this package.
 type Profile struct {
-	// Name identifies the profile and names its output directory.
-	Name string
-
-	// MetricsPlugin is the Grafana datasource plugin type-id that backs metric
-	// queries, e.g. "prometheus" or "victoriametrics-metrics-datasource".
-	//
-	// A Grafana data source variable holds exactly one plugin type — its
-	// "Instance name filter" narrows instances, not types — so portability
-	// across backends is a property of this field, not something a single board
-	// can express. "prometheus" is the portable choice: the cluster exposes two
-	// prometheus-type datasources over the same VictoriaMetrics backend, so a
-	// board built this way also runs against a real Prometheus unchanged.
-	MetricsPlugin string
-
-	// MetricsVar is the name of the dashboard variable holding the metrics
-	// datasource. Panels reference it as "${<MetricsVar>}".
-	MetricsVar string
-
-	// MetricsRegex optionally filters which datasource instances appear in the
-	// variable's dropdown. Empty means no filter.
-	MetricsRegex string
-
-	// MetricsDefault is the datasource instance name preselected in the
-	// dropdown. When absent from the target Grafana, Grafana falls back to the
-	// first matching instance.
+	Name           string
+	MetricsPlugin  string
+	MetricsVar     string
+	MetricsRegex   string
 	MetricsDefault string
-
-	// LogsPlugin is the plugin type-id backing log queries. Empty disables log
-	// panels for this profile.
-	LogsPlugin string
-
-	// Namespace is where generated Kubernetes resources are created.
-	Namespace string
-
-	// InstanceLabels selects the target Grafana instances for the operator.
-	InstanceLabels map[string]string
-
-	// ResyncPeriod is how often the operator re-reconciles generated resources.
-	ResyncPeriod time.Duration
-
-	// SourceURL is linked from every board so a reader who opens it in the UI
-	// can find the code that produced it.
-	SourceURL string
+	LogsPlugin     string
+	SourceURL      string
 }
 
-// Cluster is the duynhlab homelab cluster: Grafana 13.2.0 managed by
-// grafana-operator 5.24.0 in namespace "monitoring".
+// Cluster returns the profile for the duynhlab homelab Grafana instance.
 func Cluster() Profile {
 	return Profile{
 		Name:           "cluster",
@@ -74,73 +30,54 @@ func Cluster() Profile {
 		MetricsVar:     "ds",
 		MetricsDefault: "VictoriaMetrics (Prometheus)",
 		LogsPlugin:     "victoriametrics-logs-datasource",
-		Namespace:      "monitoring",
-		InstanceLabels: map[string]string{"dashboards": "grafana"},
-		ResyncPeriod:   30 * time.Second,
 		SourceURL:      "https://github.com/duynhlab/obs-as-code",
 	}
 }
 
-// MetricsRef is the datasource reference every metric query and panel must use.
-func (p Profile) MetricsRef() dashboard.DataSourceRef {
-	return dashboard.DataSourceRef{
-		Type: &p.MetricsPlugin,
-		Uid:  ref(p.VarRef(p.MetricsVar)),
-	}
+// MetricsRef returns the V2 datasource reference used by Prometheus queries.
+func (p Profile) MetricsRef() *dashboardv2.Dashboardv2DataQueryKindDatasourceBuilder {
+	return dashboardv2.NewDashboardv2DataQueryKindDatasourceBuilder().Name(p.VarRef(p.MetricsVar))
 }
 
-// VarRef renders a dashboard variable reference, e.g. VarRef("ds") is "${ds}".
-func (Profile) VarRef(name string) string {
-	return "${" + name + "}"
-}
+// VarRef renders a dashboard variable reference such as ${ds}.
+func (Profile) VarRef(name string) string { return "${" + name + "}" }
 
-// MetricsVariable builds the datasource variable that MetricsRef points at.
-// Every board carries it; without it MetricsRef resolves to nothing.
-func (p Profile) MetricsVariable() *dashboard.DatasourceVariableBuilder {
-	b := dashboard.NewDatasourceVariableBuilder(p.MetricsVar).
+// MetricsVariable builds the datasource variable referenced by MetricsRef.
+func (p Profile) MetricsVariable() *dashboardv2.DatasourceVariableBuilder {
+	b := dashboardv2.NewDatasourceVariableBuilder(p.MetricsVar).
 		Label("Datasource").
-		Type(p.MetricsPlugin).
-		// A typed-in datasource name cannot resolve to an instance, so offering
-		// the option only invites a board that renders nothing.
+		PluginId(p.MetricsPlugin).
 		AllowCustomValue(false)
-
 	if p.MetricsRegex != "" {
 		b = b.Regex(p.MetricsRegex)
 	}
 	if p.MetricsDefault != "" {
-		b = b.Current(dashboard.VariableOption{
-			Text:  dashboard.StringOrArrayOfString{String: ref(p.MetricsDefault)},
-			Value: dashboard.StringOrArrayOfString{String: ref(p.MetricsDefault)},
+		b = b.Current(dashboardv2.VariableOption{
+			Text:  dashboardv2.StringOrArrayOfString{String: ref(p.MetricsDefault)},
+			Value: dashboardv2.StringOrArrayOfString{String: ref(p.MetricsDefault)},
 		})
 	}
-
 	return b
 }
 
-// ErrInvalid reports a Profile that cannot produce valid resources.
+// ErrInvalid identifies an incomplete profile.
 var ErrInvalid = errors.New("invalid profile")
 
-// Validate reports whether every field a renderer depends on is populated.
+// Validate reports every required field that is missing.
 func (p Profile) Validate() error {
-	missing := make([]string, 0, 5)
+	missing := make([]string, 0, 3)
 	for name, value := range map[string]string{
-		"Name":          p.Name,
-		"MetricsPlugin": p.MetricsPlugin,
-		"MetricsVar":    p.MetricsVar,
-		"Namespace":     p.Namespace,
+		"Name": p.Name, "MetricsPlugin": p.MetricsPlugin, "MetricsVar": p.MetricsVar,
 	} {
 		if value == "" {
 			missing = append(missing, name)
 		}
 	}
-	if len(p.InstanceLabels) == 0 {
-		missing = append(missing, "InstanceLabels")
+	if len(missing) == 0 {
+		return nil
 	}
-	if len(missing) > 0 {
-		slices.Sort(missing)
-		return fmt.Errorf("%w %q: empty %v", ErrInvalid, p.Name, missing)
-	}
-	return nil
+	slices.Sort(missing)
+	return fmt.Errorf("%w %q: empty %v", ErrInvalid, p.Name, missing)
 }
 
 func ref[T any](v T) *T { return &v }

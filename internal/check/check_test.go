@@ -8,288 +8,226 @@ import (
 	"github.com/duynhlab/obs-as-code/internal/check"
 )
 
-// boardJSON builds a dashboard model with the given panels and, unless
-// suppressed, a datasource variable — so each test isolates one rule.
-func boardJSON(t *testing.T, withVariable bool, panels ...map[string]any) []byte {
+func query(expr, refID, datasource string) map[string]any {
+	return map[string]any{"spec": map[string]any{
+		"refId": refID,
+		"query": map[string]any{
+			"group": "prometheus", "datasource": map[string]any{"name": datasource},
+			"spec": map[string]any{"expr": expr},
+		},
+	}}
+}
+
+func goodPanel() map[string]any {
+	return map[string]any{"kind": "Panel", "spec": map[string]any{
+		"title": "Request rate",
+		"data": map[string]any{"spec": map[string]any{"queries": []map[string]any{
+			query(`sum(rate(http_requests_total{job=~"$job"}[$__rate_interval])) by (route)`, "A", "${ds}"),
+		}}},
+	}}
+}
+
+func boardJSON(t *testing.T, withVariable bool, panels map[string]map[string]any, items []map[string]any) []byte {
 	t.Helper()
-
-	model := map[string]any{
-		"uid":    "test-board",
-		"title":  "Test Board",
-		"panels": panels,
-	}
+	variables := []map[string]any{}
 	if withVariable {
-		model["templating"] = map[string]any{
-			"list": []map[string]any{{"name": "ds", "type": "datasource"}},
-		}
+		variables = append(variables, map[string]any{"kind": "DatasourceVariable", "spec": map[string]any{"name": "ds", "pluginId": "prometheus"}})
 	}
-
-	out, err := json.Marshal(model)
+	resource := map[string]any{
+		"apiVersion": "dashboard.grafana.app/v2", "kind": "Dashboard",
+		"spec": map[string]any{
+			"variables": variables, "elements": panels,
+			"layout": map[string]any{"kind": "GridLayout", "spec": map[string]any{"items": items}},
+		},
+	}
+	out, err := json.Marshal(resource)
 	if err != nil {
-		t.Fatalf("marshal: %v", err)
+		t.Fatal(err)
 	}
 	return out
 }
 
-// goodPanel is a panel that breaks no rule; tests mutate a copy of it.
-func goodPanel() map[string]any {
-	return map[string]any{
-		"type":    "timeseries",
-		"title":   "Request rate",
-		"gridPos": map[string]int{"x": 0, "y": 0, "w": 8, "h": 8},
-		"targets": []map[string]any{{
-			"refId":      "A",
-			"expr":       `sum(rate(http_server_request_duration_seconds_count{job=~"$job"}[$__rate_interval])) by (http_route)`,
-			"datasource": map[string]string{"type": "prometheus", "uid": "${ds}"},
-		}},
-	}
+func item(name string, x, y, width, height int) map[string]any {
+	return map[string]any{"spec": map[string]any{
+		"x": x, "y": y, "width": width, "height": height,
+		"element": map[string]any{"name": name},
+	}}
 }
 
-// targetsOf returns a panel's targets, failing the test rather than panicking
-// if the fixture is malformed.
-func targetsOf(t *testing.T, panel map[string]any) []map[string]any {
-	t.Helper()
+func oneBoard(t *testing.T, panel map[string]any) []byte {
+	return boardJSON(t, true, map[string]map[string]any{"requests": panel}, []map[string]any{item("requests", 0, 0, 12, 8)})
+}
 
-	targets, ok := panel["targets"].([]map[string]any)
+func panelQueries(t *testing.T, panel map[string]any) []map[string]any {
+	t.Helper()
+	dataSpec := panelDataSpec(t, panel)
+	queries, ok := dataSpec["queries"].([]map[string]any)
 	if !ok {
-		t.Fatalf("fixture panel has no targets: %v", panel["targets"])
+		t.Fatalf("panel queries has type %T", dataSpec["queries"])
 	}
-	return targets
+	return queries
+}
+
+func panelSpec(t *testing.T, panel map[string]any) map[string]any {
+	t.Helper()
+	spec, ok := panel["spec"].(map[string]any)
+	if !ok {
+		t.Fatalf("panel spec has type %T", panel["spec"])
+	}
+	return spec
+}
+
+func panelDataSpec(t *testing.T, panel map[string]any) map[string]any {
+	t.Helper()
+	spec := panelSpec(t, panel)
+	data, ok := spec["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("panel data has type %T", spec["data"])
+	}
+	dataSpec, ok := data["spec"].(map[string]any)
+	if !ok {
+		t.Fatalf("panel data spec has type %T", data["spec"])
+	}
+	return dataSpec
+}
+
+func firstQuery(t *testing.T, panel map[string]any) map[string]any {
+	t.Helper()
+	targets := panelQueries(t, panel)
+	if len(targets) == 0 {
+		t.Fatal("panel has no queries")
+	}
+	targetSpec, ok := targets[0]["spec"].(map[string]any)
+	if !ok {
+		t.Fatalf("target spec has type %T", targets[0]["spec"])
+	}
+	query, ok := targetSpec["query"].(map[string]any)
+	if !ok {
+		t.Fatalf("query has type %T", targetSpec["query"])
+	}
+	return query
+}
+
+func setExpr(t *testing.T, panel map[string]any, expr string) {
+	t.Helper()
+	query := firstQuery(t, panel)
+	spec, ok := query["spec"].(map[string]any)
+	if !ok {
+		t.Fatalf("query spec has type %T", query["spec"])
+	}
+	spec["expr"] = expr
 }
 
 func hasRule(violations []check.Violation, rule string) bool {
-	for _, v := range violations {
-		if v.Rule == rule {
+	for _, violation := range violations {
+		if violation.Rule == rule {
 			return true
 		}
 	}
 	return false
 }
 
-func TestDashboardAcceptsAConformingBoard(t *testing.T) {
+func TestDashboardAcceptsAConformingV2Resource(t *testing.T) {
 	t.Parallel()
-
-	got := check.Dashboard("test-board", boardJSON(t, true, goodPanel()))
-	if len(got) != 0 {
-		t.Errorf("Dashboard() = %d violations, want none:\n%s", len(got), check.Format(got))
+	if got := check.Dashboard("test", oneBoard(t, goodPanel())); len(got) != 0 {
+		t.Fatalf("Dashboard() violations:\n%s", check.Format(got))
 	}
 }
 
-// TestEveryRuleFires is the point of this file. A rule that cannot fire is
-// worse than no rule: it reports success forever and nobody looks again.
 func TestEveryRuleFires(t *testing.T) {
 	t.Parallel()
-
 	tests := []struct {
-		name  string
-		rule  string
-		model func(t *testing.T) []byte
+		name string
+		rule string
+		body func(*testing.T) []byte
 	}{
-		{
-			name: "panel with no query",
-			rule: check.RulePanelNoTarget,
-			model: func(t *testing.T) []byte {
-				p := goodPanel()
-				delete(p, "targets")
-				return boardJSON(t, true, p)
-			},
-		},
-		{
-			name: "panel with no title",
-			rule: check.RulePanelNoTitle,
-			model: func(t *testing.T) []byte {
-				p := goodPanel()
-				p["title"] = ""
-				return boardJSON(t, true, p)
-			},
-		},
-		{
-			name: "overlapping panels",
-			rule: check.RuleGridOverlap,
-			model: func(t *testing.T) []byte {
-				a, b := goodPanel(), goodPanel()
-				b["title"] = "Error rate"
-				// Same cell as a: this is the bug the previous repo shipped.
-				b["gridPos"] = map[string]int{"x": 4, "y": 0, "w": 8, "h": 8}
-				return boardJSON(t, true, a, b)
-			},
-		},
-		{
-			name: "duplicate refId in one panel",
-			rule: check.RuleDuplicateRefID,
-			model: func(t *testing.T) []byte {
-				p := goodPanel()
-				targets := targetsOf(t, p)
-				dup := map[string]any{
-					"refId":      "A",
-					"expr":       `up{job=~"$job"}`,
-					"datasource": map[string]string{"type": "prometheus", "uid": "${ds}"},
-				}
-				p["targets"] = append(targets, dup)
-				return boardJSON(t, true, p)
-			},
-		},
-		{
-			name: "hardcoded datasource uid",
-			rule: check.RuleDatasourceRef,
-			model: func(t *testing.T) []byte {
-				p := goodPanel()
-				targetsOf(t, p)[0]["datasource"] =
-					map[string]string{"type": "prometheus", "uid": "P1809F7CD0C75ACF3"}
-				return boardJSON(t, true, p)
-			},
-		},
-		{
-			name: "no datasource variable",
-			rule: check.RuleNoDatasourceVar,
-			model: func(t *testing.T) []byte {
-				return boardJSON(t, false, goodPanel())
-			},
-		},
-		{
-			name: "broken query",
-			rule: check.RuleQuerySyntax,
-			model: func(t *testing.T) []byte {
-				p := goodPanel()
-				targetsOf(t, p)[0]["expr"] = `sum(rate(up[5m])`
-				return boardJSON(t, true, p)
-			},
-		},
-		{
-			name: "metricsql-only query is not portable",
-			rule: check.RuleQuerySyntax,
-			model: func(t *testing.T) []byte {
-				p := goodPanel()
-				targetsOf(t, p)[0]["expr"] = `rate(up{job=~"$job"}[$__rate_interval]) keep_metric_names`
-				return boardJSON(t, true, p)
-			},
-		},
-		{
-			name: "fixed rate window",
-			rule: check.RuleRateInterval,
-			model: func(t *testing.T) []byte {
-				p := goodPanel()
-				targetsOf(t, p)[0]["expr"] = `sum(rate(up{job=~"$job"}[5m]))`
-				return boardJSON(t, true, p)
-			},
-		},
-		{
-			name: "forbidden high-cardinality label in a matcher",
-			rule: check.RuleForbiddenLabel,
-			model: func(t *testing.T) []byte {
-				p := goodPanel()
-				targetsOf(t, p)[0]["expr"] = `sum(rate(orders_total{user_id="42"}[$__rate_interval]))`
-				return boardJSON(t, true, p)
-			},
-		},
-		{
-			name: "forbidden high-cardinality label in a by clause",
-			rule: check.RuleForbiddenLabel,
-			model: func(t *testing.T) []byte {
-				p := goodPanel()
-				targetsOf(t, p)[0]["expr"] = `sum(rate(orders_total{job=~"$job"}[$__rate_interval])) by (order_id)`
-				return boardJSON(t, true, p)
-			},
-		},
-		{
-			name: "semconv database namespace instead of pgx",
-			rule: check.RuleDBNamespace,
-			model: func(t *testing.T) []byte {
-				p := goodPanel()
-				targetsOf(t, p)[0]["expr"] = `sum(rate(db_query_duration_seconds_count{job=~"$job"}[$__rate_interval]))`
-				return boardJSON(t, true, p)
-			},
-		},
+		{"panel without query", check.RulePanelNoTarget, func(t *testing.T) []byte {
+			panel := goodPanel()
+			delete(panelDataSpec(t, panel), "queries")
+			return oneBoard(t, panel)
+		}},
+		{"panel without title", check.RulePanelNoTitle, func(t *testing.T) []byte {
+			panel := goodPanel()
+			panelSpec(t, panel)["title"] = ""
+			return oneBoard(t, panel)
+		}},
+		{"overlapping grid items", check.RuleGridOverlap, func(t *testing.T) []byte {
+			return boardJSON(t, true, map[string]map[string]any{"a": goodPanel(), "b": goodPanel()}, []map[string]any{item("a", 0, 0, 12, 8), item("b", 6, 0, 12, 8)})
+		}},
+		{"unreferenced panel", check.RuleGridOverlap, func(t *testing.T) []byte {
+			return boardJSON(t, true, map[string]map[string]any{"a": goodPanel()}, nil)
+		}},
+		{"duplicate refId", check.RuleDuplicateRefID, func(t *testing.T) []byte {
+			panel := goodPanel()
+			queries := panelQueries(t, panel)
+			panelDataSpec(t, panel)["queries"] = append(queries, query("up", "A", "${ds}"))
+			return oneBoard(t, panel)
+		}},
+		{"hardcoded datasource", check.RuleDatasourceRef, func(t *testing.T) []byte {
+			panel := goodPanel()
+			firstQuery(t, panel)["datasource"] = map[string]any{"name": "prom-main"}
+			return oneBoard(t, panel)
+		}},
+		{"no datasource variable", check.RuleNoDatasourceVar, func(t *testing.T) []byte {
+			return boardJSON(t, false, map[string]map[string]any{"requests": goodPanel()}, []map[string]any{item("requests", 0, 0, 12, 8)})
+		}},
+		{"broken query", check.RuleQuerySyntax, func(t *testing.T) []byte {
+			panel := goodPanel()
+			setExpr(t, panel, `sum(rate(up[5m])`)
+			return oneBoard(t, panel)
+		}},
+		{"fixed rate window", check.RuleRateInterval, func(t *testing.T) []byte {
+			panel := goodPanel()
+			setExpr(t, panel, `rate(up[5m])`)
+			return oneBoard(t, panel)
+		}},
+		{"forbidden label", check.RuleForbiddenLabel, func(t *testing.T) []byte {
+			panel := goodPanel()
+			setExpr(t, panel, `sum(up) by (user_id)`)
+			return oneBoard(t, panel)
+		}},
+		{"database namespace", check.RuleDBNamespace, func(t *testing.T) []byte {
+			panel := goodPanel()
+			setExpr(t, panel, `db_query_duration_seconds_count`)
+			return oneBoard(t, panel)
+		}},
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-
-			got := check.Dashboard("test-board", tt.model(t))
-			if !hasRule(got, tt.rule) {
-				t.Errorf("rule %q did not fire; violations were:\n%s", tt.rule, check.Format(got))
+			got := check.Dashboard("test", test.body(t))
+			if !hasRule(got, test.rule) {
+				t.Errorf("rule %q did not fire:\n%s", test.rule, check.Format(got))
 			}
 		})
 	}
 }
 
-func TestDashboardIgnoresRowPanels(t *testing.T) {
+func TestForbiddenLabelIgnoresSubstrings(t *testing.T) {
 	t.Parallel()
-
-	// A row legitimately has no query and no meaningful size; flagging it would
-	// make the report noise that people learn to skip.
-	row := map[string]any{
-		"type":    "row",
-		"title":   "Golden signals",
-		"gridPos": map[string]int{"x": 0, "y": 0, "w": 24, "h": 1},
-	}
-
-	got := check.Dashboard("test-board", boardJSON(t, true, row, goodPanel()))
-	if len(got) != 0 {
-		t.Errorf("Dashboard() = %d violations, want none:\n%s", len(got), check.Format(got))
+	panel := goodPanel()
+	setExpr(t, panel, `sum(pipeline_descriptions_total) by (recipe)`)
+	if got := check.Dashboard("test", oneBoard(t, panel)); hasRule(got, check.RuleForbiddenLabel) {
+		t.Errorf("forbidden-label fired on substring:\n%s", check.Format(got))
 	}
 }
 
-func TestDashboardChecksPanelsInsideCollapsedRows(t *testing.T) {
+func TestDashboardRejectsClassicAndInvalidJSON(t *testing.T) {
 	t.Parallel()
-
-	// A collapsed row nests its children, and a board is not exempt from the
-	// rules just because a row happened to be saved collapsed.
-	broken := goodPanel()
-	delete(broken, "targets")
-
-	row := map[string]any{
-		"type":    "row",
-		"title":   "Collapsed",
-		"gridPos": map[string]int{"x": 0, "y": 0, "w": 24, "h": 1},
-		"panels":  []map[string]any{broken},
-	}
-
-	got := check.Dashboard("test-board", boardJSON(t, true, row))
-	if !hasRule(got, check.RulePanelNoTarget) {
-		t.Errorf("a broken panel inside a collapsed row was not checked; violations:\n%s", check.Format(got))
-	}
-}
-
-func TestLabelRuleDoesNotFireOnCoincidentalSubstrings(t *testing.T) {
-	t.Parallel()
-
-	// "ip" is forbidden as a label, but a rule that matched the letters would
-	// reject every metric containing them and get switched off within a week.
-	p := goodPanel()
-	targetsOf(t, p)[0]["expr"] =
-		`sum(rate(pipeline_descriptions_total{job=~"$job"}[$__rate_interval])) by (recipe)`
-
-	got := check.Dashboard("test-board", boardJSON(t, true, p))
-	if hasRule(got, check.RuleForbiddenLabel) {
-		t.Errorf("forbidden-label fired on a coincidental substring:\n%s", check.Format(got))
-	}
-}
-
-func TestDashboardReportsInvalidJSON(t *testing.T) {
-	t.Parallel()
-
-	got := check.Dashboard("broken", []byte(`{"uid":`))
-	if len(got) == 0 {
-		t.Fatal("Dashboard() = no violations for malformed JSON")
+	for _, body := range [][]byte{[]byte(`{"uid":"classic"}`), []byte(`{"spec":`)} {
+		if got := check.Dashboard("bad", body); !hasRule(got, check.RuleQuerySyntax) {
+			t.Errorf("Dashboard(%s) did not reject invalid resource", body)
+		}
 	}
 }
 
 func TestFormatSortsAndJoins(t *testing.T) {
 	t.Parallel()
-
 	if got := check.Format(nil); got != "" {
-		t.Errorf("Format(nil) = %q, want empty", got)
+		t.Errorf("Format(nil) = %q", got)
 	}
-
-	// Sorted, so a CI log diff between two runs is meaningful.
-	got := check.Format([]check.Violation{
-		{Resource: "z", Rule: "b", Detail: "second"},
-		{Resource: "a", Rule: "a", Detail: "first"},
-	})
-	lines := strings.Split(got, "\n")
-	if len(lines) != 2 || !strings.HasPrefix(lines[0], "a:") {
+	got := check.Format([]check.Violation{{Resource: "z", Rule: "b", Detail: "second"}, {Resource: "a", Rule: "a", Detail: "first"}})
+	if lines := strings.Split(got, "\n"); len(lines) != 2 || !strings.HasPrefix(lines[0], "a:") {
 		t.Errorf("Format() = %q, want sorted output", got)
 	}
 }

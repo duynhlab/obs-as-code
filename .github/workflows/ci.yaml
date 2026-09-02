@@ -41,5 +41,8 @@ jobs:
       - name: Generate
         run: make generate
 
+      - name: Validate generated resources
+        run: make validate
+
       - name: Check generated output is in sync
-        run: make diff
+        run: git diff --exit-code -- generated
