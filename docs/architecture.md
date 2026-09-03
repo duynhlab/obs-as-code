@@ -10,8 +10,9 @@ GrafanaManifest (grafana.integreatly.org/v1beta1)
 └── spec.template: Dashboard (dashboard.grafana.app/v2)
 ```
 
-Both layers are JSON. The extensionless `generated/cluster/manifests/Kustomization`
-is also JSON accepted by Kustomize.
+Both layers are JSON. Each manifest directory carries its own extensionless
+`Kustomization`, also JSON, accepted by Kustomize. Folders and dashboards are
+separate roots so Flux can order them — see [flux/README.md](flux/README.md).
 
 ## Boundaries
 

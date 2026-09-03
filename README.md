@@ -59,7 +59,7 @@ internal/delivery            Dashboard/Folder → GrafanaManifest JSON
 internal/check               artifact-level conformance rules
 internal/catalog             one explicit aggregation point
 generated/cluster/dashboards raw Dashboard V2 resources
-generated/cluster/manifests  Flux-applied GrafanaManifest resources
+generated/cluster/manifests/{folders,dashboards}  Flux-applied GrafanaManifest resources, one wave each
 ```
 
 The explicit catalog avoids import-side-effect registration. A package exports
