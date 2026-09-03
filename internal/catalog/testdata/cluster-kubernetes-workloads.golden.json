@@ -1150,7 +1150,9 @@
               "name": "${ds}"
             },
             "spec": {
-              "expr": "label_values(kube_pod_info, exported_namespace)"
+              "qryType": 1,
+              "query": "label_values(kube_pod_info, exported_namespace)",
+              "refId": "PrometheusVariableQueryEditor-VariableQuery"
             }
           },
           "regex": "",
@@ -1183,7 +1185,9 @@
               "name": "${ds}"
             },
             "spec": {
-              "expr": "label_values(namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\"}, workload_type)"
+              "qryType": 1,
+              "query": "label_values(namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\"}, workload_type)",
+              "refId": "PrometheusVariableQueryEditor-VariableQuery"
             }
           },
           "regex": "",
@@ -1216,7 +1220,9 @@
               "name": "${ds}"
             },
             "spec": {
-              "expr": "label_values(namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\"}, workload)"
+              "qryType": 1,
+              "query": "label_values(namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$namespace\",workload_type=~\"$workload_type\"}, workload)",
+              "refId": "PrometheusVariableQueryEditor-VariableQuery"
             }
           },
           "regex": "",

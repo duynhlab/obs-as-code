@@ -5,7 +5,6 @@ import (
 	"github.com/grafana/grafana-foundation-sdk/go/cog"
 	sdkcommon "github.com/grafana/grafana-foundation-sdk/go/common"
 	"github.com/grafana/grafana-foundation-sdk/go/dashboardv2"
-	"github.com/grafana/grafana-foundation-sdk/go/prometheus"
 	"github.com/grafana/grafana-foundation-sdk/go/units"
 
 	"github.com/duynhlab/obs-as-code/internal/common"
@@ -90,7 +89,7 @@ func build(p profile.Profile) *common.DashboardBuilder {
 func namespaceVariable(p profile.Profile) *dashboardv2.QueryVariableBuilder {
 	return common.SelectAll(dashboardv2.NewQueryVariableBuilder("namespace").
 		Label("Namespace").
-		Query(prometheus.NewQueryV2Builder().Datasource(p.MetricsRef()).Expr(queries.NamespaceValues())).
+		Query(common.VariableQuery(p, queries.NamespaceValues())).
 		Refresh(dashboardv2.VariableRefreshOnTimeRangeChanged).
 		Multi(true).
 		Sort(dashboardv2.VariableSortAlphabeticalAsc))
