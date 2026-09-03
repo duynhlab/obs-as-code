@@ -1181,7 +1181,7 @@
               "multi": true,
               "includeAll": true,
               "allValue": ".*",
-              "allowCustomValue": true
+              "allowCustomValue": false
             }
           },
           {
@@ -1214,7 +1214,7 @@
               "multi": true,
               "includeAll": true,
               "allValue": ".*",
-              "allowCustomValue": true
+              "allowCustomValue": false
             }
           },
           {
@@ -1247,7 +1247,7 @@
               "multi": true,
               "includeAll": true,
               "allValue": ".*",
-              "allowCustomValue": true
+              "allowCustomValue": false
             }
           }
         ]
