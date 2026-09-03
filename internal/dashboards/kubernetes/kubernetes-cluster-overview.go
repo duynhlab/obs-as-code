@@ -88,13 +88,12 @@ func build(p profile.Profile) *common.DashboardBuilder {
 // The values are plain namespace names, so the same variable scopes cAdvisor
 // panels through their own `namespace` label.
 func namespaceVariable(p profile.Profile) *dashboardv2.QueryVariableBuilder {
-	return dashboardv2.NewQueryVariableBuilder("namespace").
+	return common.SelectAll(dashboardv2.NewQueryVariableBuilder("namespace").
 		Label("Namespace").
 		Query(prometheus.NewQueryV2Builder().Datasource(p.MetricsRef()).Expr("label_values(kube_pod_info, exported_namespace)")).
 		Refresh(dashboardv2.VariableRefreshOnTimeRangeChanged).
 		Multi(true).
-		IncludeAll(true).
-		Sort(dashboardv2.VariableSortAlphabeticalAsc)
+		Sort(dashboardv2.VariableSortAlphabeticalAsc))
 }
 
 // ---------------------------------------------------------------------------

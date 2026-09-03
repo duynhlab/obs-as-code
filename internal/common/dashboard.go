@@ -134,3 +134,33 @@ func (b *DashboardBuilder) Build() (dashboardv2.Dashboard, error) {
 	b.sdk.RowsLayout(rows).Links(b.links)
 	return b.sdk.Build()
 }
+
+// SelectAll makes a query variable open on every value, and it is not optional
+// styling — a variable without it ships a broken board.
+//
+// Dashboard V2's QueryVariableSpec.Current is a value field with no omitempty,
+// so it serialises whether or not anyone set it, and an unset one marshals as
+// {"text":"","value":""}. Grafana reads that as a genuine selection of the
+// empty string rather than "nothing chosen yet", so $var expands to "" and
+// every panel filtering on it matches nothing. Classic dashboards emitted
+// current: null and Grafana resolved it from the options, which is why the
+// pre-V2 boards kept working while the migrated ones went blank.
+//
+// Measured on the cluster: namespace=~"" returned 0 data points where
+// namespace=~".*" returned 28.
+//
+// AllValue is pinned to ".*" rather than left for Grafana to derive. Every
+// query here matches with =~, ".*" is verified against the live backend, and
+// an explicit value keeps the board independent of how a given Grafana version
+// chooses to expand All.
+func SelectAll(b *dashboardv2.QueryVariableBuilder) *dashboardv2.QueryVariableBuilder {
+	return b.
+		IncludeAll(true).
+		AllValue(".*").
+		Current(dashboardv2.VariableOption{
+			Text:  dashboardv2.StringOrArrayOfString{String: strPtr("All")},
+			Value: dashboardv2.StringOrArrayOfString{String: strPtr("$__all")},
+		})
+}
+
+func strPtr(s string) *string { return &s }

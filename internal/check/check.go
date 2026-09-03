@@ -33,10 +33,18 @@ const (
 	// display name instead of a uid passed every other rule here while making
 	// every panel on every board render empty.
 	RuleDatasourceVarValue = "datasource-var-value"
-	RuleQuerySyntax        = "query-syntax"
-	RuleRateInterval       = "rate-interval"
-	RuleForbiddenLabel     = "forbidden-label"
-	RuleDBNamespace        = "db-namespace"
+	// RuleQueryVarValue exists because V2's QueryVariableSpec.Current has no
+	// omitempty: a variable nobody set serialises as {"text":"","value":""},
+	// and Grafana honours that as a real selection of the empty string rather
+	// than "nothing chosen yet". Every panel filtering on such a variable
+	// matches nothing. Classic dashboards emitted current: null and Grafana
+	// resolved it from the options, which is why the pre-V2 boards kept working
+	// through the same migration that blanked these.
+	RuleQueryVarValue  = "query-var-value"
+	RuleQuerySyntax    = "query-syntax"
+	RuleRateInterval   = "rate-interval"
+	RuleForbiddenLabel = "forbidden-label"
+	RuleDBNamespace    = "db-namespace"
 )
 
 var forbiddenLabels = []string{
@@ -139,6 +147,10 @@ func Dashboard(uid string, model []byte) []Violation {
 	datasources := make(map[string]string)
 	var out []Violation
 	for _, variable := range board.Spec.Variables {
+		if variable.Kind == "QueryVariable" {
+			out = append(out, checkQueryVariable(uid, variable)...)
+			continue
+		}
 		if variable.Kind != "DatasourceVariable" || variable.Spec.Name == "" {
 			continue
 		}
@@ -177,6 +189,40 @@ func Dashboard(uid string, model []byte) []Violation {
 		}
 	}
 	return append(out, checkLayout(uid, board.Spec.Elements, board.Spec.Layout)...)
+}
+
+// checkQueryVariable rejects a variable that ships no selection. See
+// RuleQueryVarValue for why an unset Current is not merely cosmetic.
+func checkQueryVariable(uid string, v variable) []Violation {
+	name := v.Spec.Name
+	if v.Spec.Current == nil {
+		return []Violation{{Resource: uid, Rule: RuleQueryVarValue,
+			Detail: fmt.Sprintf("query variable %q has no current selection, so every panel filtering on it matches nothing", name)}}
+	}
+	if selectsSomething(v.Spec.Current.Value) {
+		return nil
+	}
+	return []Violation{{Resource: uid, Rule: RuleQueryVarValue,
+		Detail: fmt.Sprintf("query variable %q selects nothing (current.value is %#v); wrap the builder in common.SelectAll or set a concrete default", name, v.Spec.Current.Value)}}
+}
+
+// selectsSomething reports whether a current.value names at least one option.
+// Multi-select stores an array, so a bare string check would call every
+// multi-value variable broken.
+func selectsSomething(value any) bool {
+	switch v := value.(type) {
+	case string:
+		return v != ""
+	case []any:
+		for _, item := range v {
+			if s, ok := item.(string); ok && s != "" {
+				return true
+			}
+		}
+		return false
+	default:
+		return false
+	}
 }
 
 func checkPanel(uid, key string, panel element, datasources map[string]string) []Violation {

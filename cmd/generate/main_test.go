@@ -268,3 +268,79 @@ func assertPanelDatasourcesAreDeclared(t *testing.T, spec map[string]any, declar
 		}
 	}
 }
+
+// TestGeneratedBoardsSelectAVariableValue guards the second defect that shipped
+// empty boards, and it is a different failure from the datasource one above.
+//
+// Dashboard V2's QueryVariableSpec.Current is a value field with no omitempty,
+// so it is serialised whether or not anyone set it, and an unset one marshals
+// as {"text":"","value":""}. Grafana honours that as a real selection of the
+// empty string, so $namespace expanded to "" and every panel filtering on it
+// matched nothing. Classic dashboards emitted current: null instead, which
+// Grafana treats as "no selection yet" and resolves from the options — which is
+// why the v0.3.0 boards kept working while the V2 ones went blank.
+//
+// Measured on the cluster: namespace=~"" returned 0 data points where
+// namespace=~".*" returned 28.
+//
+// The assertion is deliberately about emptiness rather than a specific value:
+// what breaks a board is shipping a selection nobody made, not which value was
+// chosen.
+func TestGeneratedBoardsSelectAVariableValue(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "generated")
+	if err := run([]string{"-out", out}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+
+	boards, err := filepath.Glob(filepath.Join(out, "*", "dashboards", "*.json"))
+	if err != nil {
+		t.Fatalf("glob boards: %v", err)
+	}
+	if len(boards) == 0 {
+		t.Fatal("no generated boards found; the assertions below would pass vacuously")
+	}
+
+	var checked int
+	for _, path := range boards {
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			board := readJSON(t, path)
+			spec, ok := board["spec"].(map[string]any)
+			if !ok {
+				t.Fatalf("spec has type %T", board["spec"])
+			}
+			variables, ok := spec["variables"].([]any)
+			if !ok {
+				t.Fatalf("spec.variables has type %T", spec["variables"])
+			}
+
+			for _, raw := range variables {
+				v, _ := raw.(map[string]any)
+				if v["kind"] != "QueryVariable" {
+					continue
+				}
+				vSpec, _ := v["spec"].(map[string]any)
+				name, _ := vSpec["name"].(string)
+				checked++
+
+				current, ok := vSpec["current"].(map[string]any)
+				if !ok {
+					t.Errorf("query variable %q has no current object", name)
+					continue
+				}
+				value, _ := current["value"].(string)
+				if value == "" {
+					t.Errorf("query variable %q ships current.value %q; an empty selection makes every panel filtering on it match nothing", name, value)
+				}
+				if text, _ := current["text"].(string); text == "" {
+					t.Errorf("query variable %q ships an empty current.text, so the picker renders blank", name)
+				}
+			}
+		})
+	}
+
+	// Every board here declares at least one query variable, so a zero count
+	// means the kind filter stopped matching and the loop above proved nothing.
+	if checked == 0 {
+		t.Fatal("no QueryVariable was inspected; the kind filter no longer matches the generated shape")
+	}
+}
