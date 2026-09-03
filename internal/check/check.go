@@ -47,8 +47,17 @@ const (
 	// in variables. A variable whose selector is malformed or empty yields an
 	// empty dropdown, and an empty dropdown means every panel filtering on it
 	// matches nothing — the same silent emptiness, one layer earlier.
-	RuleVariableQuery  = "variable-query"
-	RuleQuerySyntax    = "query-syntax"
+	RuleVariableQuery = "variable-query"
+	RuleQuerySyntax   = "query-syntax"
+	// RuleResourceKind is separate from RuleQuerySyntax because "this file is
+	// not a V2 Dashboard" and "this PromQL does not parse" send a reader to
+	// different files, and one rule name for both sent them to the wrong one.
+	RuleResourceKind = "resource-kind"
+	// RuleElementKind inverts the element gate. `if kind == "Panel"` silently
+	// skipped everything else, so a LibraryPanel or a future kind would ship
+	// with no title, query or datasource check at all — passing the suite by
+	// being invisible to it.
+	RuleElementKind    = "element-kind"
 	RuleRateInterval   = "rate-interval"
 	RuleForbiddenLabel = "forbidden-label"
 	RuleDBNamespace    = "db-namespace"
@@ -151,10 +160,10 @@ type gridItem struct {
 func Dashboard(uid string, model []byte) []Violation {
 	var board dashboardResource
 	if err := json.Unmarshal(model, &board); err != nil {
-		return []Violation{{Resource: uid, Rule: RuleQuerySyntax, Detail: "resource is not valid JSON: " + err.Error()}}
+		return []Violation{{Resource: uid, Rule: RuleResourceKind, Detail: "resource is not valid JSON: " + err.Error()}}
 	}
 	if board.APIVersion != "dashboard.grafana.app/v2" || board.Kind != "Dashboard" {
-		return []Violation{{Resource: uid, Rule: RuleQuerySyntax, Detail: fmt.Sprintf("want dashboard.grafana.app/v2 Dashboard, got %q %q", board.APIVersion, board.Kind)}}
+		return []Violation{{Resource: uid, Rule: RuleResourceKind, Detail: fmt.Sprintf("want dashboard.grafana.app/v2 Dashboard, got %q %q", board.APIVersion, board.Kind)}}
 	}
 
 	datasources := make(map[string]string)
@@ -198,8 +207,14 @@ func Dashboard(uid string, model []byte) []Violation {
 	slices.Sort(keys)
 	for _, key := range keys {
 		element := board.Spec.Elements[key]
-		if element.Kind == "Panel" {
+		// An allow-list, not a match: an unrecognised kind is reported rather
+		// than skipped, so adding one is a decision someone makes here.
+		switch element.Kind {
+		case "Panel":
 			out = append(out, checkPanel(uid, key, element, datasources)...)
+		default:
+			out = append(out, Violation{Resource: uid, Rule: RuleElementKind,
+				Detail: fmt.Sprintf("element %q has kind %q, which no rule checks; add it to the allow-list in check.Dashboard together with the rules it needs", key, element.Kind)})
 		}
 	}
 	return append(out, checkLayout(uid, board.Spec.Elements, board.Spec.Layout)...)
@@ -333,15 +348,68 @@ func checkVariableQuery(uid string, v variable) []Violation {
 	return append(out, checkExprConventions(uid, subject, inner)...)
 }
 
-var rateFamily = regexp.MustCompile(`\b(rate|irate|increase|delta|deriv)\s*\([^)]*\[\s*\d+[smhdwy]\s*\]`)
+// rateCall finds the opening paren of a rate-family call. The window inside it
+// is located by walking the call, not by regex: `[^)]*` cannot cross a nested
+// call, so rate(label_replace(...)[5m]) used to pass the rule meant to catch
+// it — and this repo nests label_replace inside aggregations routinely.
+//
+// The rule stays scoped to the rate family deliberately. A fixed window on
+// max_over_time is the question being asked ("was it crashlooping in the last
+// 5m"), and two panels in generated/ ask exactly that, so treating every
+// duration literal as a violation would reject correct output.
+var rateCall = regexp.MustCompile(`\b(rate|irate|increase|delta|deriv)\s*\(`)
+
+// rewriteCall finds label_replace/label_join, whose destination label is a
+// quoted argument rather than a matcher — a position where a high-cardinality
+// label enters an expression without appearing in any matcher or by() clause.
+var rewriteCall = regexp.MustCompile(`\blabel_(replace|join)\s*\(`)
+
+var fixedWindow = regexp.MustCompile(`\[\s*\d+[smhdwy]\s*\]`)
 var dbQueryMetric = regexp.MustCompile(`\bdb_query_\w+`)
+
+// callSpans returns the argument text of every call whose opening paren head
+// matches, with nesting handled. An unbalanced expression yields nothing here;
+// promql.Check is what reports it.
+func callSpans(expr string, head *regexp.Regexp) []string {
+	var out []string
+	for _, loc := range head.FindAllStringIndex(expr, -1) {
+		depth := 0
+		for i := loc[1] - 1; i < len(expr); i++ {
+			switch expr[i] {
+			case '(':
+				depth++
+			case ')':
+				depth--
+				if depth == 0 {
+					out = append(out, expr[loc[1]:i])
+					i = len(expr)
+				}
+			}
+			if depth == 0 {
+				break
+			}
+		}
+	}
+	return out
+}
+
+// fixedWindowInRateCall returns the offending window, or "" if every rate-family
+// call uses a variable interval.
+func fixedWindowInRateCall(expr string) string {
+	for _, args := range callSpans(expr, rateCall) {
+		if match := fixedWindow.FindString(args); match != "" {
+			return match
+		}
+	}
+	return ""
+}
 
 // checkExprConventions takes a pre-formatted subject (`panel "X"`, `variable
 // "y"`) because these conventions hold wherever PromQL appears, and a rule that
 // can only describe panels invites a second copy for variables.
 func checkExprConventions(uid, subject, expr string) []Violation {
 	var out []Violation
-	if match := rateFamily.FindString(expr); match != "" {
+	if match := fixedWindowInRateCall(expr); match != "" {
 		out = append(out, Violation{Resource: uid, Rule: RuleRateInterval, Detail: fmt.Sprintf("%s: %q uses a fixed range window; use $__rate_interval", subject, match)})
 	}
 	if match := dbQueryMetric.FindString(expr); match != "" {
@@ -355,9 +423,46 @@ func checkExprConventions(uid, subject, expr string) []Violation {
 	return out
 }
 
+// labelUsed reports whether expr names label in any position that puts it on
+// the result: a matcher, a grouping clause, a vector-matching clause, or the
+// destination of a label rewrite.
+//
+// The rewrite case is checked by scanning the call's arguments rather than by
+// regex, both because those calls nest and because only a quoted argument
+// counts — a label name appearing as a matcher VALUE (reason="ip") is data, not
+// a label, and must not fire.
 func labelUsed(expr, label string) bool {
-	pattern := regexp.MustCompile(`\b` + regexp.QuoteMeta(label) + `\b\s*(=~|!~|=|!=)|\b(by|without)\s*\([^)]*\b` + regexp.QuoteMeta(label) + `\b`)
-	return pattern.MatchString(expr)
+	quoted := regexp.QuoteMeta(label)
+	pattern := regexp.MustCompile(`\b` + quoted + `\b\s*(=~|!~|=|!=)` +
+		`|\b(by|without|on|ignoring|group_left|group_right)\s*\([^)]*\b` + quoted + `\b`)
+	if pattern.MatchString(expr) {
+		return true
+	}
+
+	needle := `"` + label + `"`
+	for _, args := range callSpans(expr, rewriteCall) {
+		// The source label is quoted too, and rewriting FROM a
+		// high-cardinality label is how you get rid of it — only the
+		// destination, the first quoted argument, puts it on the result.
+		if destination := firstQuotedArg(args); destination == needle {
+			return true
+		}
+	}
+	return false
+}
+
+// firstQuotedArg returns the first double-quoted argument of a call, quotes
+// included, or "" when there is none.
+func firstQuotedArg(args string) string {
+	start := strings.Index(args, `"`)
+	if start < 0 {
+		return ""
+	}
+	end := strings.Index(args[start+1:], `"`)
+	if end < 0 {
+		return ""
+	}
+	return args[start : start+end+2]
 }
 
 func checkLayout(uid string, elements map[string]element, root layout) []Violation {
