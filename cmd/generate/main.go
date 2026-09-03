@@ -135,16 +135,22 @@ func renderProfile(p profile.Profile, outDir string, written map[string]bool, st
 		return violations, nil
 	}
 
-	const folderFile = "platform-infrastructure.json"
-	folder, err := delivery.Folder("platform-infrastructure", "Platform / Infrastructure", target)
-	if err != nil {
-		return nil, err
-	}
+	// The folders written here are the ones boards declare, so a board naming
+	// a folder that never gets created is not expressible.
 	folderDir := filepath.Join(outDir, p.Name, "manifests", "folders")
-	if err := writeFile(filepath.Join(folderDir, folderFile), folder, written, stdout); err != nil {
-		return nil, err
+	folderResources := make([]string, 0, len(catalog.Folders()))
+	for _, f := range catalog.Folders() {
+		body, err := delivery.Folder(f.UID, f.Title, target)
+		if err != nil {
+			return nil, err
+		}
+		file := f.UID + ".json"
+		if err := writeFile(filepath.Join(folderDir, file), body, written, stdout); err != nil {
+			return nil, err
+		}
+		folderResources = append(folderResources, file)
 	}
-	if err := writeKustomization(folderDir, []string{folderFile}, written, stdout); err != nil {
+	if err := writeKustomization(folderDir, folderResources, written, stdout); err != nil {
 		return nil, err
 	}
 

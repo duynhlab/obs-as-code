@@ -16,7 +16,6 @@ type Profile struct {
 	Name          string
 	MetricsPlugin string
 	MetricsVar    string
-	MetricsRegex  string
 	// MetricsUID is the datasource's UID and MetricsDefault is its display
 	// label. Grafana resolves a datasource reference by UID, so these two are
 	// different kinds of string and must never be interchanged — see
@@ -63,9 +62,6 @@ func (p Profile) MetricsVariable() *dashboardv2.DatasourceVariableBuilder {
 		Label("Datasource").
 		PluginId(p.MetricsPlugin).
 		AllowCustomValue(false)
-	if p.MetricsRegex != "" {
-		b = b.Regex(p.MetricsRegex)
-	}
 	// Value is the datasource UID; Text is only the label shown in the picker.
 	// Setting both to the display name is what made every board render empty:
 	// ${ds} expanded to "VictoriaMetrics (Prometheus)", Grafana looked that up
