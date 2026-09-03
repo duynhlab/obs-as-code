@@ -40,7 +40,14 @@ const (
 	// matches nothing. Classic dashboards emitted current: null and Grafana
 	// resolved it from the options, which is why the pre-V2 boards kept working
 	// through the same migration that blanked these.
-	RuleQueryVarValue  = "query-var-value"
+	RuleQueryVarValue = "query-var-value"
+	// RuleVariableQuery exists because promql.Check had exactly one non-test
+	// call site, inside checkTarget: panel queries were gated and variable
+	// queries were not, while both defects that shipped an unusable board lived
+	// in variables. A variable whose selector is malformed or empty yields an
+	// empty dropdown, and an empty dropdown means every panel filtering on it
+	// matches nothing — the same silent emptiness, one layer earlier.
+	RuleVariableQuery  = "variable-query"
 	RuleQuerySyntax    = "query-syntax"
 	RuleRateInterval   = "rate-interval"
 	RuleForbiddenLabel = "forbidden-label"
@@ -76,6 +83,20 @@ type variable struct {
 		Current *struct {
 			Value any `json:"value"`
 		} `json:"current"`
+		Query dataQuery `json:"query"`
+	} `json:"spec"`
+}
+
+// dataQuery is the same wire shape whether it backs a panel target or a
+// variable, which is why one type serves both — and a reminder that a rule
+// applying to one applies to the other unless there is a reason it does not.
+type dataQuery struct {
+	Group      string `json:"group"`
+	Datasource *struct {
+		Name string `json:"name"`
+	} `json:"datasource"`
+	Spec struct {
+		Expr string `json:"expr"`
 	} `json:"spec"`
 }
 
@@ -98,16 +119,8 @@ type element struct {
 
 type panelQuery struct {
 	Spec struct {
-		RefID string `json:"refId"`
-		Query struct {
-			Group      string `json:"group"`
-			Datasource *struct {
-				Name string `json:"name"`
-			} `json:"datasource"`
-			Spec struct {
-				Expr string `json:"expr"`
-			} `json:"spec"`
-		} `json:"query"`
+		RefID string    `json:"refId"`
+		Query dataQuery `json:"query"`
 	} `json:"spec"`
 }
 
@@ -149,6 +162,7 @@ func Dashboard(uid string, model []byte) []Violation {
 	for _, variable := range board.Spec.Variables {
 		if variable.Kind == "QueryVariable" {
 			out = append(out, checkQueryVariable(uid, variable)...)
+			out = append(out, checkVariableQuery(uid, variable)...)
 			continue
 		}
 		if variable.Kind != "DatasourceVariable" || variable.Spec.Name == "" {
@@ -262,30 +276,80 @@ func checkTarget(uid, panelTitle string, target panelQuery, datasources map[stri
 		out = append(out, Violation{Resource: uid, Rule: RuleDatasourceRef, Detail: fmt.Sprintf("panel %q: query group %q does not match datasource variable plugin %q", panelTitle, query.Group, plugin)})
 	}
 
+	// A blank expression used to return early here, which meant promql.Check
+	// never ran and RulePanelNoTarget could not fire either, because the target
+	// existed — it just had nothing in it. Every gate passed and the panel
+	// rendered empty.
 	expr := query.Spec.Expr
 	if strings.TrimSpace(expr) == "" {
-		return out
+		return append(out, Violation{Resource: uid, Rule: RulePanelNoTarget,
+			Detail: fmt.Sprintf("panel %q has a target with an empty expression, so it renders empty", panelTitle)})
 	}
+	subject := fmt.Sprintf("panel %q", panelTitle)
 	if err := promql.Check(expr); err != nil {
-		out = append(out, Violation{Resource: uid, Rule: RuleQuerySyntax, Detail: fmt.Sprintf("panel %q: %v", panelTitle, err)})
+		out = append(out, Violation{Resource: uid, Rule: RuleQuerySyntax, Detail: fmt.Sprintf("%s: %v", subject, err)})
 	}
-	return append(out, checkExprConventions(uid, panelTitle, expr)...)
+	return append(out, checkExprConventions(uid, subject, expr)...)
+}
+
+// labelValuesCall unwraps Grafana's label_values(<selector>, <label>).
+//
+// The wrapper is a datasource function rather than PromQL, so promql.Check
+// rejects a whole variable query outright — measured on both of this repo's
+// real expressions. The selector inside it is PromQL, and it is the part the
+// datasource evaluates, so that is what gets checked.
+var labelValuesCall = regexp.MustCompile(`^label_values\((.*),\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\)$`)
+
+// checkVariableQuery gates the PromQL a variable is built from.
+//
+// An expression this cannot unwrap is checked as plain PromQL, which is what a
+// variable query is when it uses no datasource function. An author reaching for
+// a different one (query_result, metrics) will see this rule fire and must
+// extend labelValuesCall — failing loudly beats silently trusting a shape no
+// rule understands, which is how the gate came to skip variables in the first
+// place.
+func checkVariableQuery(uid string, v variable) []Violation {
+	subject := fmt.Sprintf("variable %q", v.Spec.Name)
+	expr := strings.TrimSpace(v.Spec.Query.Spec.Expr)
+	if expr == "" {
+		return []Violation{{Resource: uid, Rule: RuleVariableQuery,
+			Detail: fmt.Sprintf("%s has no query expression, so its dropdown is empty and every panel filtering on it matches nothing", subject)}}
+	}
+
+	inner := expr
+	if match := labelValuesCall.FindStringSubmatch(expr); match != nil {
+		inner = strings.TrimSpace(match[1])
+		if inner == "" {
+			return []Violation{{Resource: uid, Rule: RuleVariableQuery,
+				Detail: fmt.Sprintf("%s wraps an empty series selector in label_values(), which lists nothing", subject)}}
+		}
+	}
+
+	var out []Violation
+	if err := promql.Check(inner); err != nil {
+		out = append(out, Violation{Resource: uid, Rule: RuleVariableQuery,
+			Detail: fmt.Sprintf("%s: %v", subject, err)})
+	}
+	return append(out, checkExprConventions(uid, subject, inner)...)
 }
 
 var rateFamily = regexp.MustCompile(`\b(rate|irate|increase|delta|deriv)\s*\([^)]*\[\s*\d+[smhdwy]\s*\]`)
 var dbQueryMetric = regexp.MustCompile(`\bdb_query_\w+`)
 
-func checkExprConventions(uid, panelTitle, expr string) []Violation {
+// checkExprConventions takes a pre-formatted subject (`panel "X"`, `variable
+// "y"`) because these conventions hold wherever PromQL appears, and a rule that
+// can only describe panels invites a second copy for variables.
+func checkExprConventions(uid, subject, expr string) []Violation {
 	var out []Violation
 	if match := rateFamily.FindString(expr); match != "" {
-		out = append(out, Violation{Resource: uid, Rule: RuleRateInterval, Detail: fmt.Sprintf("panel %q: %q uses a fixed range window; use $__rate_interval", panelTitle, match)})
+		out = append(out, Violation{Resource: uid, Rule: RuleRateInterval, Detail: fmt.Sprintf("%s: %q uses a fixed range window; use $__rate_interval", subject, match)})
 	}
 	if match := dbQueryMetric.FindString(expr); match != "" {
-		out = append(out, Violation{Resource: uid, Rule: RuleDBNamespace, Detail: fmt.Sprintf("panel %q: %q is semconv's database namespace; RFC-0017 requires pgx_*", panelTitle, match)})
+		out = append(out, Violation{Resource: uid, Rule: RuleDBNamespace, Detail: fmt.Sprintf("%s: %q is semconv's database namespace; RFC-0017 requires pgx_*", subject, match)})
 	}
 	for _, label := range forbiddenLabels {
 		if labelUsed(expr, label) {
-			out = append(out, Violation{Resource: uid, Rule: RuleForbiddenLabel, Detail: fmt.Sprintf("panel %q: label %q has unbounded cardinality and RFC-0017 forbids it", panelTitle, label)})
+			out = append(out, Violation{Resource: uid, Rule: RuleForbiddenLabel, Detail: fmt.Sprintf("%s: label %q has unbounded cardinality and RFC-0017 forbids it", subject, label)})
 		}
 	}
 	return out
