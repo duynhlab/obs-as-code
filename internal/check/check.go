@@ -27,10 +27,16 @@ const (
 	RuleDuplicateRefID  = "duplicate-refid"
 	RuleDatasourceRef   = "datasource-ref"
 	RuleNoDatasourceVar = "no-datasource-variable"
-	RuleQuerySyntax     = "query-syntax"
-	RuleRateInterval    = "rate-interval"
-	RuleForbiddenLabel  = "forbidden-label"
-	RuleDBNamespace     = "db-namespace"
+	// RuleDatasourceVarValue exists because RuleDatasourceRef only proves a
+	// panel points at a DECLARED variable, never that the variable points at
+	// something Grafana can resolve. A variable whose current.value held a
+	// display name instead of a uid passed every other rule here while making
+	// every panel on every board render empty.
+	RuleDatasourceVarValue = "datasource-var-value"
+	RuleQuerySyntax        = "query-syntax"
+	RuleRateInterval       = "rate-interval"
+	RuleForbiddenLabel     = "forbidden-label"
+	RuleDBNamespace        = "db-namespace"
 )
 
 var forbiddenLabels = []string{
@@ -56,8 +62,19 @@ type variable struct {
 	Spec struct {
 		Name     string `json:"name"`
 		PluginID string `json:"pluginId"`
+		// Current is decoded loosely on purpose: the V2 schema allows a string
+		// or an array of strings here, and a wrong Go type would make this
+		// check silently skip rather than fail.
+		Current *struct {
+			Value any `json:"value"`
+		} `json:"current"`
 	} `json:"spec"`
 }
+
+// datasourceUID is the shape Grafana accepts as a datasource uid: lowercase
+// alphanumerics and dashes. A display name — capitals, spaces, parentheses —
+// cannot match, which is the whole point.
+var datasourceUID = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
 
 type element struct {
 	Kind string `json:"kind"`
@@ -120,12 +137,30 @@ func Dashboard(uid string, model []byte) []Violation {
 	}
 
 	datasources := make(map[string]string)
+	var out []Violation
 	for _, variable := range board.Spec.Variables {
-		if variable.Kind == "DatasourceVariable" && variable.Spec.Name != "" {
-			datasources["${"+variable.Spec.Name+"}"] = variable.Spec.PluginID
+		if variable.Kind != "DatasourceVariable" || variable.Spec.Name == "" {
+			continue
+		}
+		datasources["${"+variable.Spec.Name+"}"] = variable.Spec.PluginID
+
+		// An absent current is fine — the board defers to Grafana's default.
+		// A present one must be a uid, because ${var} expands to this value and
+		// Grafana resolves datasources by uid alone.
+		if variable.Spec.Current == nil {
+			continue
+		}
+		value, ok := variable.Spec.Current.Value.(string)
+		if !ok {
+			out = append(out, Violation{Resource: uid, Rule: RuleDatasourceVarValue,
+				Detail: fmt.Sprintf("variable %q has a non-string current.value (%T); a datasource variable resolves one uid", variable.Spec.Name, variable.Spec.Current.Value)})
+			continue
+		}
+		if !datasourceUID.MatchString(value) {
+			out = append(out, Violation{Resource: uid, Rule: RuleDatasourceVarValue,
+				Detail: fmt.Sprintf("variable %q has current.value %q, which is not a datasource uid; use the uid, not the display name", variable.Spec.Name, value)})
 		}
 	}
-	var out []Violation
 	if len(datasources) == 0 {
 		out = append(out, Violation{Resource: uid, Rule: RuleNoDatasourceVar, Detail: "board declares no DatasourceVariable; build it with common.NewDashboard"})
 	}

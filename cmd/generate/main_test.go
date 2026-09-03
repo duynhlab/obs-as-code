@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -126,5 +127,144 @@ func TestRunRendersASingleProfile(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(out, "cluster", "dashboards")); err != nil {
 		t.Errorf("cluster profile was not rendered: %v", err)
+	}
+}
+
+// TestGeneratedBoardsResolveTheirDatasource walks every board this generator
+// actually writes and asserts the datasource wiring end to end.
+//
+// It exists because the unit tests around profile and check both passed while
+// every V2 board rendered empty in Grafana: the datasource variable's
+// current.value carried the datasource's display name, and ${ds} therefore
+// expanded to a string no lookup could resolve. Per-package tests could not see
+// that, because neither of them looks at the file that ships.
+//
+// This is the only test that catches the defect no matter where it is
+// reintroduced — a profile change, a builder change, or a new board that
+// declares its own variable.
+//
+// It cannot prove the uid exists in a real Grafana; that is a cluster fact.
+// Verify that separately with:
+//
+//	kubectl -n monitoring exec deploy/grafana-deployment -- \
+//	  wget -qO- http://localhost:3000/api/datasources/uid/<uid>
+func TestGeneratedBoardsResolveTheirDatasource(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "generated")
+	if err := run([]string{"-out", out}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+
+	boards, err := filepath.Glob(filepath.Join(out, "*", "dashboards", "*.json"))
+	if err != nil {
+		t.Fatalf("glob boards: %v", err)
+	}
+	// Guard against a glob that silently matches nothing, which would make
+	// every assertion below pass vacuously.
+	if len(boards) == 0 {
+		t.Fatal("no generated boards found; the assertions below would pass vacuously")
+	}
+
+	uidShape := regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
+
+	for _, path := range boards {
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			board := readJSON(t, path)
+
+			spec, ok := board["spec"].(map[string]any)
+			if !ok {
+				t.Fatalf("spec has type %T", board["spec"])
+			}
+			variables, ok := spec["variables"].([]any)
+			if !ok {
+				t.Fatalf("spec.variables has type %T", spec["variables"])
+			}
+
+			declared := make(map[string]bool)
+			var sawDatasourceVar bool
+
+			for _, raw := range variables {
+				v, ok := raw.(map[string]any)
+				if !ok {
+					t.Fatalf("variable has type %T", raw)
+				}
+				vSpec, ok := v["spec"].(map[string]any)
+				if !ok {
+					t.Fatalf("variable spec has type %T", v["spec"])
+				}
+				name, _ := vSpec["name"].(string)
+				if name != "" {
+					declared["${"+name+"}"] = true
+				}
+				if v["kind"] != "DatasourceVariable" {
+					continue
+				}
+				sawDatasourceVar = true
+
+				current, ok := vSpec["current"].(map[string]any)
+				if !ok {
+					t.Fatalf("datasource variable %q has no current; Grafana would pick a datasource for us", name)
+				}
+				value, ok := current["value"].(string)
+				if !ok {
+					t.Fatalf("datasource variable %q has current.value of type %T, want one uid string", name, current["value"])
+				}
+				if !uidShape.MatchString(value) {
+					t.Errorf("datasource variable %q has current.value %q, want a uid matching %s (a display name cannot resolve)", name, value, uidShape)
+				}
+				if text, ok := current["text"].(string); ok && text == value {
+					t.Errorf("datasource variable %q has text == value == %q; text is a label and value is a uid, so they must differ", name, value)
+				}
+			}
+
+			if !sawDatasourceVar {
+				t.Error("board declares no DatasourceVariable, so every panel would fall back to Grafana's default datasource")
+			}
+
+			// Every panel must point at a variable this board declares. check.go
+			// asserts this on the in-memory model; repeating it on the file that
+			// ships proves the generate path cannot route around the checker.
+			assertPanelDatasourcesAreDeclared(t, spec, declared)
+		})
+	}
+}
+
+func assertPanelDatasourcesAreDeclared(t *testing.T, spec map[string]any, declared map[string]bool) {
+	t.Helper()
+
+	elements, ok := spec["elements"].(map[string]any)
+	if !ok {
+		t.Fatalf("spec.elements has type %T", spec["elements"])
+	}
+	if len(elements) == 0 {
+		t.Fatal("board has no elements; the assertions below would pass vacuously")
+	}
+
+	for key, raw := range elements {
+		element, ok := raw.(map[string]any)
+		if !ok {
+			t.Fatalf("element %q has type %T", key, raw)
+		}
+		eSpec, _ := element["spec"].(map[string]any)
+		data, _ := eSpec["data"].(map[string]any)
+		dataSpec, _ := data["spec"].(map[string]any)
+		queries, _ := dataSpec["queries"].([]any)
+
+		for _, rawQuery := range queries {
+			query, ok := rawQuery.(map[string]any)
+			if !ok {
+				t.Fatalf("element %q has a query of type %T", key, rawQuery)
+			}
+			qSpec, _ := query["spec"].(map[string]any)
+			inner, _ := qSpec["query"].(map[string]any)
+			ds, ok := inner["datasource"].(map[string]any)
+			if !ok {
+				t.Errorf("element %q has a query with no datasource", key)
+				continue
+			}
+			name, _ := ds["name"].(string)
+			if !declared[name] {
+				t.Errorf("element %q queries datasource %q, which this board does not declare as a variable", key, name)
+			}
+		}
 	}
 }

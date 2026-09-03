@@ -31,7 +31,13 @@ func boardJSON(t *testing.T, withVariable bool, panels map[string]map[string]any
 	t.Helper()
 	variables := []map[string]any{}
 	if withVariable {
-		variables = append(variables, map[string]any{"kind": "DatasourceVariable", "spec": map[string]any{"name": "ds", "pluginId": "prometheus"}})
+		// A valid current is part of the default fixture so every test that
+		// builds a board also covers the happy path of RuleDatasourceVarValue.
+		// Cases that need a bad one use datasourceVarBoard instead.
+		variables = append(variables, map[string]any{"kind": "DatasourceVariable", "spec": map[string]any{
+			"name": "ds", "pluginId": "prometheus",
+			"current": map[string]any{"text": "VictoriaMetrics (Prometheus)", "value": "victoriametrics-prometheus"},
+		}})
 	}
 	resource := map[string]any{
 		"apiVersion": "dashboard.grafana.app/v2", "kind": "Dashboard",
@@ -229,5 +235,98 @@ func TestFormatSortsAndJoins(t *testing.T) {
 	got := check.Format([]check.Violation{{Resource: "z", Rule: "b", Detail: "second"}, {Resource: "a", Rule: "a", Detail: "first"}})
 	if lines := strings.Split(got, "\n"); len(lines) != 2 || !strings.HasPrefix(lines[0], "a:") {
 		t.Errorf("Format() = %q, want sorted output", got)
+	}
+}
+
+// datasourceVarBoard builds a board whose datasource variable carries an
+// arbitrary `current`, which the shared boardJSON helper cannot express.
+func datasourceVarBoard(t *testing.T, current any) []byte {
+	t.Helper()
+	spec := map[string]any{"name": "ds", "pluginId": "prometheus"}
+	if current != nil {
+		spec["current"] = current
+	}
+	resource := map[string]any{
+		"apiVersion": "dashboard.grafana.app/v2", "kind": "Dashboard",
+		"spec": map[string]any{
+			"variables": []map[string]any{{"kind": "DatasourceVariable", "spec": spec}},
+			"elements":  map[string]map[string]any{"requests": goodPanel()},
+			"layout": map[string]any{"kind": "GridLayout", "spec": map[string]any{
+				"items": []map[string]any{item("requests", 0, 0, 12, 8)},
+			}},
+		},
+	}
+	out, err := json.Marshal(resource)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// TestDashboardDatasourceVarValue is the regression test for the defect that
+// made every V2 board render empty: the datasource variable's current.value
+// held the datasource's DISPLAY NAME instead of its UID, so ${ds} expanded to a
+// string Grafana could not resolve and no panel issued a query.
+//
+// Nothing here can prove a uid exists in a real Grafana — that is a cluster
+// fact. What it proves is that the value has the shape of a uid, which is the
+// half of the contract this repo owns.
+func TestDashboardDatasourceVarValue(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		current any
+		wantFir bool
+	}{
+		{
+			name:    "display name is not a uid",
+			current: map[string]any{"text": "VictoriaMetrics (Prometheus)", "value": "VictoriaMetrics (Prometheus)"},
+			wantFir: true,
+		},
+		{
+			name:    "uid",
+			current: map[string]any{"text": "VictoriaMetrics (Prometheus)", "value": "victoriametrics-prometheus"},
+		},
+		{
+			// Absent current is allowed on purpose: a board may legitimately
+			// defer the choice to Grafana's default datasource.
+			name:    "no current",
+			current: nil,
+		},
+		{name: "uppercase", current: map[string]any{"value": "VictoriaMetrics"}, wantFir: true},
+		{name: "spaces", current: map[string]any{"value": "my datasource"}, wantFir: true},
+		{
+			// Worse than absent: an empty string resolves to nothing while
+			// looking like a deliberate choice.
+			name:    "empty string",
+			current: map[string]any{"value": ""},
+			wantFir: true,
+		},
+		{
+			// A multi-value datasource variable makes no sense for this repo,
+			// but the rule must decide rather than panic on the type.
+			name:    "array value",
+			current: map[string]any{"value": []string{"victoriametrics-prometheus"}},
+			wantFir: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := check.Dashboard("board", datasourceVarBoard(t, tt.current))
+
+			var fired bool
+			for _, v := range got {
+				if v.Rule == check.RuleDatasourceVarValue {
+					fired = true
+				}
+			}
+			if fired != tt.wantFir {
+				t.Errorf("RuleDatasourceVarValue fired = %v, want %v (violations: %v)", fired, tt.wantFir, got)
+			}
+		})
 	}
 }

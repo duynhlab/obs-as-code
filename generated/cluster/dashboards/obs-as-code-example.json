@@ -837,7 +837,7 @@
           "regex": "",
           "current": {
             "text": "VictoriaMetrics (Prometheus)",
-            "value": "VictoriaMetrics (Prometheus)"
+            "value": "victoriametrics-prometheus"
           },
           "options": [],
           "multi": false,

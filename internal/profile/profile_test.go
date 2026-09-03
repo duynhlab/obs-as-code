@@ -2,6 +2,7 @@ package profile_test
 
 import (
 	"errors"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -79,6 +80,7 @@ func TestProfileValidate(t *testing.T) {
 		{name: "no name", mutate: func(p *profile.Profile) { p.Name = "" }, wantErr: "Name"},
 		{name: "no metrics plugin", mutate: func(p *profile.Profile) { p.MetricsPlugin = "" }, wantErr: "MetricsPlugin"},
 		{name: "no metrics var", mutate: func(p *profile.Profile) { p.MetricsVar = "" }, wantErr: "MetricsVar"},
+		{name: "no metrics uid", mutate: func(p *profile.Profile) { p.MetricsUID = "" }, wantErr: "MetricsUID"},
 	}
 
 	for _, tt := range tests {
@@ -120,8 +122,60 @@ func TestProfileValidateReportsEveryMissingField(t *testing.T) {
 		t.Fatal("Validate() = nil, want an error")
 	}
 
-	const want = "[MetricsPlugin MetricsVar Name]"
+	const want = "[MetricsPlugin MetricsUID MetricsVar Name]"
 	if !strings.Contains(err.Error(), want) {
 		t.Errorf("Validate() = %v, want it to contain %s", err, want)
 	}
 }
+
+// TestProfileMetricsVariableCurrentIsUID guards the bug that made every V2 board
+// render empty: MetricsVariable set Current.Value to the datasource's DISPLAY
+// NAME. Grafana resolves a datasource reference by UID, so ${ds} expanded to a
+// string no lookup could match and every panel silently queried nothing.
+//
+// Measured on the homelab cluster 2026-09-03:
+//
+//	/api/datasources/uid/victoriametrics-prometheus      -> 200
+//	/api/datasources/uid/VictoriaMetrics%20(Prometheus)  -> 404
+//	/api/ds/query with uid=victoriametrics-prometheus    -> 76 frames
+//	/api/ds/query with uid=VictoriaMetrics (Prometheus)  -> 404
+//
+// Nothing in this repo can prove the UID exists in Grafana — that is a cluster
+// fact, not a code fact. What these assertions can prove is that the value has
+// the SHAPE of a uid and is not merely a copy of the label, which is the whole
+// failure. A green suite here still needs a human to look at a panel.
+func TestProfileMetricsVariableCurrentIsUID(t *testing.T) {
+	t.Parallel()
+
+	v, err := profile.Cluster().MetricsVariable().Build()
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	text, value := v.Spec.Current.Text.String, v.Spec.Current.Value.String
+	if text == nil || value == nil {
+		t.Fatalf("Current = %+v, want both Text and Value set", v.Spec.Current)
+	}
+
+	// The assertion that actually catches the bug. Text is a human label and
+	// Value is a uid; they are different kinds of string, so they must never be
+	// the same string.
+	if *text == *value {
+		t.Errorf("Current.Text and Current.Value are both %q; Value must be the datasource uid, not its display name", *value)
+	}
+	if got, want := *value, "victoriametrics-prometheus"; got != want {
+		t.Errorf("Current.Value = %q, want %q", got, want)
+	}
+	if got, want := *text, "VictoriaMetrics (Prometheus)"; got != want {
+		t.Errorf("Current.Text = %q, want %q", got, want)
+	}
+
+	// Shape check, so a future rename to any display-name-looking string fails
+	// here rather than in a browser. Grafana uids are lowercase alphanumeric
+	// plus dashes — no spaces, no parentheses, no capitals.
+	if !uidShape.MatchString(*value) {
+		t.Errorf("Current.Value = %q, want it to match %s", *value, uidShape)
+	}
+}
+
+var uidShape = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
