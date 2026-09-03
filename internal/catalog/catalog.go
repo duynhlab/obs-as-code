@@ -17,3 +17,6 @@ func Published() []registry.Dashboard { return dashboards.Published() }
 
 // Deployable returns dashboards wrapped for GrafanaManifest delivery.
 func Deployable() []registry.Dashboard { return dashboards.Deployable() }
+
+// Folders returns the distinct folders those dashboards declare.
+func Folders() []registry.Folder { return dashboards.Folders() }

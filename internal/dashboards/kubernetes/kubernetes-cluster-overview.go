@@ -38,7 +38,7 @@ var meta = registry.Meta{
 
 // Dashboards returns the Kubernetes domain catalog entries.
 func Dashboards() []registry.Dashboard {
-	delivery := &registry.Delivery{FolderUID: "platform-infrastructure"}
+	delivery := &registry.Delivery{FolderUID: "platform-infrastructure", Title: "Platform / Infrastructure"}
 	return []registry.Dashboard{
 		{Meta: meta, Build: func(p profile.Profile) cog.Builder[dashboardv2.Dashboard] { return build(p) }, Delivery: delivery},
 		{Meta: workloadsMeta, Build: func(p profile.Profile) cog.Builder[dashboardv2.Dashboard] { return buildWorkloads(p) }, Delivery: delivery},

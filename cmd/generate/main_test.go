@@ -3,11 +3,14 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/duynhlab/obs-as-code/internal/catalog"
 )
 
 func TestRunWritesV2DashboardsAndDeployableManifests(t *testing.T) {
@@ -407,6 +410,59 @@ func TestRunSplitsFoldersFromDashboards(t *testing.T) {
 	for _, e := range entries {
 		if !e.IsDir() {
 			t.Errorf("%s is directly under manifests/ and belongs to no wave", e.Name())
+		}
+	}
+}
+
+// TestWrittenFoldersMatchWhatBoardsDeclare closes the gap between a board's
+// declared folder and the folder the artifact actually creates. Those were
+// separate facts — the generator held a literal — and a board pointing at a
+// folder nobody created fails at apply time with
+// "folders.folder.grafana.app ... not found", which no test in either repo
+// could see.
+func TestWrittenFoldersMatchWhatBoardsDeclare(t *testing.T) {
+	t.Parallel()
+
+	out := t.TempDir()
+	if err := run([]string{"-out", out}, io.Discard); err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+
+	declared := catalog.Folders()
+	if len(declared) == 0 {
+		t.Fatal("no folders declared, so this test proved nothing")
+	}
+
+	entries, err := os.ReadDir(filepath.Join(out, "cluster", "manifests", "folders"))
+	if err != nil {
+		t.Fatalf("read folders dir: %v", err)
+	}
+
+	written := make(map[string]bool)
+	for _, e := range entries {
+		if filepath.Ext(e.Name()) == ".json" {
+			written[e.Name()] = true
+		}
+	}
+
+	for _, f := range declared {
+		if !written[f.UID+".json"] {
+			t.Errorf("board declares folder %q but no %s.json was written", f.UID, f.UID)
+		}
+	}
+	if len(written) != len(declared) {
+		t.Errorf("wrote %d folder files for %d declared folders; the artifact creates a folder nobody asked for", len(written), len(declared))
+	}
+
+	// Every deployable board must name one of them, or it would apply into a
+	// folder that does not exist.
+	byUID := make(map[string]bool, len(declared))
+	for _, f := range declared {
+		byUID[f.UID] = true
+	}
+	for _, d := range catalog.Deployable() {
+		if !byUID[d.Delivery.FolderUID] {
+			t.Errorf("board %q targets folder %q, which is not in the written set", d.UID, d.Delivery.FolderUID)
 		}
 	}
 }

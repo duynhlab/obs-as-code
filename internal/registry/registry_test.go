@@ -35,9 +35,9 @@ func TestNewRejectsInvalidAndDuplicateEntries(t *testing.T) {
 		{"duplicate title", []registry.Dashboard{board("one", "Same", true), board("two", "Same", true)}, "already used"},
 		{"empty delivery folder", []registry.Dashboard{func() registry.Dashboard {
 			d := board("delivered", "Delivered", true)
-			d.Delivery = &registry.Delivery{}
+			d.Delivery = &registry.Delivery{Title: "Delivered"}
 			return d
-		}()}, "folder UID is empty"},
+		}()}, "uid is empty"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -56,7 +56,7 @@ func TestNewRejectsInvalidAndDuplicateEntries(t *testing.T) {
 func TestRegistryViewsAreOrderedAndImmutable(t *testing.T) {
 	t.Parallel()
 	shipped := board("zulu", "Zulu", true)
-	shipped.Delivery = &registry.Delivery{FolderUID: "platform"}
+	shipped.Delivery = &registry.Delivery{FolderUID: "platform", Title: "Platform"}
 	reg := registry.MustNew(shipped, board("alpha", "Alpha", false), board("mike", "Mike", true))
 
 	all := reg.All()
@@ -129,6 +129,101 @@ func TestDashboardBuildContract(t *testing.T) {
 			_, err := test.dashboard.Model(profile.Cluster())
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("Model() = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
+// TestFoldersDeriveFromDeclaredDelivery is the regression test for a folder
+// that existed in two places at once: boards declared Delivery.FolderUID while
+// the generator wrote the folder from a literal of its own, and nothing made
+// the two agree. A board could name a folder that was never created, which
+// fails at apply time with "folders.folder.grafana.app ... not found" — on the
+// cluster, not in CI.
+func TestFoldersDeriveFromDeclaredDelivery(t *testing.T) {
+	t.Parallel()
+
+	shipped := func(uid, folderUID, folderTitle string) registry.Dashboard {
+		d := board(uid, "Board "+uid, true)
+		d.Delivery = &registry.Delivery{FolderUID: folderUID, Title: folderTitle}
+		return d
+	}
+
+	r, err := registry.New(
+		shipped("b-two", "platform-infrastructure", "Platform / Infrastructure"),
+		shipped("a-one", "platform-infrastructure", "Platform / Infrastructure"),
+		shipped("c-three", "app-delivery", "App / Delivery"),
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	folders := r.Folders()
+	if len(folders) != 2 {
+		t.Fatalf("Folders() returned %d folders, want 2 distinct: %+v", len(folders), folders)
+	}
+	// Sorted by uid, so the artifact does not churn on catalog order.
+	if folders[0].UID != "app-delivery" || folders[1].UID != "platform-infrastructure" {
+		t.Errorf("Folders() = %+v, want sorted by uid", folders)
+	}
+	if folders[1].Title != "Platform / Infrastructure" {
+		t.Errorf("folder title = %q, want %q", folders[1].Title, "Platform / Infrastructure")
+	}
+}
+
+func TestDeliveryRejectsBadFolders(t *testing.T) {
+	t.Parallel()
+
+	delivered := func(uid string, d *registry.Delivery) registry.Dashboard {
+		entry := board(uid, "Board "+uid, true)
+		entry.Delivery = d
+		return entry
+	}
+
+	tests := []struct {
+		name   string
+		boards []registry.Dashboard
+		want   string
+	}{
+		{
+			name:   "empty folder uid",
+			boards: []registry.Dashboard{delivered("a", &registry.Delivery{Title: "T"})},
+			want:   "uid is empty",
+		},
+		{
+			// The folder uid becomes a Kubernetes resource name, so a value
+			// the CRD would reject must fail here rather than at apply time.
+			name:   "folder uid is not a DNS-1123 label",
+			boards: []registry.Dashboard{delivered("a", &registry.Delivery{FolderUID: "Platform Infra", Title: "T"})},
+			want:   "DNS-1123",
+		},
+		{
+			name:   "no folder title",
+			boards: []registry.Dashboard{delivered("a", &registry.Delivery{FolderUID: "platform"})},
+			want:   "folder title is empty",
+		},
+		{
+			// Two boards in one folder disagreeing about its name would make
+			// the rendered folder depend on which board was seen last.
+			name: "same folder, two titles",
+			boards: []registry.Dashboard{
+				delivered("a", &registry.Delivery{FolderUID: "platform", Title: "Platform"}),
+				delivered("b", &registry.Delivery{FolderUID: "platform", Title: "Platform / Infra"}),
+			},
+			want: "two titles",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := registry.New(tt.boards...)
+			if err == nil {
+				t.Fatalf("New() error = nil, want one mentioning %q", tt.want)
+			}
+			if !strings.Contains(err.Error(), tt.want) {
+				t.Errorf("New() error = %v, want it to mention %q", err, tt.want)
 			}
 		})
 	}
