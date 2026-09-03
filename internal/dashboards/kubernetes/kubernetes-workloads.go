@@ -83,7 +83,7 @@ func workloadsNamespaceVariable(p profile.Profile) *dashboardv2.QueryVariableBui
 	// options.
 	return common.SelectAll(dashboardv2.NewQueryVariableBuilder("namespace").
 		Label("Namespace").
-		Query(prometheus.NewQueryV2Builder().Datasource(p.MetricsRef()).Expr("label_values(kube_pod_info, exported_namespace)")).
+		Query(prometheus.NewQueryV2Builder().Datasource(p.MetricsRef()).Expr(queries.NamespaceValues())).
 		Refresh(dashboardv2.VariableRefreshOnTimeRangeChanged).
 		Multi(true).
 		Sort(dashboardv2.VariableSortAlphabeticalAsc))
@@ -92,8 +92,7 @@ func workloadsNamespaceVariable(p profile.Profile) *dashboardv2.QueryVariableBui
 func workloadTypeVariable(p profile.Profile) *dashboardv2.QueryVariableBuilder {
 	return common.SelectAll(dashboardv2.NewQueryVariableBuilder("workload_type").
 		Label("Type").
-		Query(prometheus.NewQueryV2Builder().Datasource(p.MetricsRef()).Expr(
-			`label_values(` + queries.OwnershipRule + `{namespace=~"$namespace"}, workload_type)`)).
+		Query(prometheus.NewQueryV2Builder().Datasource(p.MetricsRef()).Expr(queries.WorkloadTypeValues("$namespace"))).
 		Refresh(dashboardv2.VariableRefreshOnTimeRangeChanged).
 		Multi(true).
 		Sort(dashboardv2.VariableSortAlphabeticalAsc))
@@ -102,8 +101,7 @@ func workloadTypeVariable(p profile.Profile) *dashboardv2.QueryVariableBuilder {
 func workloadVariable(p profile.Profile) *dashboardv2.QueryVariableBuilder {
 	return common.SelectAll(dashboardv2.NewQueryVariableBuilder("workload").
 		Label("Workload").
-		Query(prometheus.NewQueryV2Builder().Datasource(p.MetricsRef()).Expr(
-			`label_values(` + queries.OwnershipRule + `{namespace=~"$namespace",workload_type=~"$workload_type"}, workload)`)).
+		Query(prometheus.NewQueryV2Builder().Datasource(p.MetricsRef()).Expr(queries.WorkloadValues("$namespace", "$workload_type"))).
 		Refresh(dashboardv2.VariableRefreshOnTimeRangeChanged).
 		Multi(true).
 		Sort(dashboardv2.VariableSortAlphabeticalAsc))

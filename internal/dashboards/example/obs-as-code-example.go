@@ -55,7 +55,7 @@ func build(p profile.Profile) *common.DashboardBuilder {
 		// than one board per service.
 		QueryVariable(common.SelectAll(dashboardv2.NewQueryVariableBuilder("job").
 			Label("Service").
-			Query(prometheus.NewQueryV2Builder().Datasource(p.MetricsRef()).Expr("label_values(up, job)")).
+			Query(prometheus.NewQueryV2Builder().Datasource(p.MetricsRef()).Expr(queries.JobValues())).
 			Refresh(dashboardv2.VariableRefreshOnTimeRangeChanged).
 			Multi(true).
 			Sort(dashboardv2.VariableSortAlphabeticalAsc))).

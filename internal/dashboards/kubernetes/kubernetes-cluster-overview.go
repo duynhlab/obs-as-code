@@ -90,7 +90,7 @@ func build(p profile.Profile) *common.DashboardBuilder {
 func namespaceVariable(p profile.Profile) *dashboardv2.QueryVariableBuilder {
 	return common.SelectAll(dashboardv2.NewQueryVariableBuilder("namespace").
 		Label("Namespace").
-		Query(prometheus.NewQueryV2Builder().Datasource(p.MetricsRef()).Expr("label_values(kube_pod_info, exported_namespace)")).
+		Query(prometheus.NewQueryV2Builder().Datasource(p.MetricsRef()).Expr(queries.NamespaceValues())).
 		Refresh(dashboardv2.VariableRefreshOnTimeRangeChanged).
 		Multi(true).
 		Sort(dashboardv2.VariableSortAlphabeticalAsc))

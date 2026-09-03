@@ -335,7 +335,16 @@ func TestDashboardDatasourceVarValue(t *testing.T) {
 // current, alongside the valid datasource variable every board needs.
 func queryVarBoard(t *testing.T, current any) []byte {
 	t.Helper()
-	qSpec := map[string]any{"name": "namespace", "includeAll": true}
+	qSpec := map[string]any{
+		"name": "namespace", "includeAll": true,
+		// A valid query keeps RuleVariableQuery quiet so only the current is
+		// on trial here.
+		"query": map[string]any{
+			"kind": "DataQuery", "group": "prometheus",
+			"datasource": map[string]any{"name": "${ds}"},
+			"spec":       map[string]any{"expr": "label_values(kube_pod_info, exported_namespace)"},
+		},
+	}
 	if current != nil {
 		qSpec["current"] = current
 	}
@@ -427,5 +436,140 @@ func TestDashboardQueryVarValue(t *testing.T) {
 				t.Errorf("RuleQueryVarValue fired = %v, want %v (violations: %v)", fired, tt.wantFir, got)
 			}
 		})
+	}
+}
+
+// varQueryBoard builds a board whose one QueryVariable carries expr, with a
+// valid current so RuleQueryVarValue stays quiet and only the query is on trial.
+func varQueryBoard(t *testing.T, expr string) []byte {
+	t.Helper()
+	qSpec := map[string]any{
+		"name":       "namespace",
+		"includeAll": true,
+		"current":    map[string]any{"text": "All", "value": "$__all"},
+		"query": map[string]any{
+			"kind": "DataQuery", "group": "prometheus",
+			"datasource": map[string]any{"name": "${ds}"},
+			"spec":       map[string]any{"expr": expr},
+		},
+	}
+	resource := map[string]any{
+		"apiVersion": "dashboard.grafana.app/v2", "kind": "Dashboard",
+		"spec": map[string]any{
+			"variables": []map[string]any{
+				{"kind": "DatasourceVariable", "spec": map[string]any{
+					"name": "ds", "pluginId": "prometheus",
+					"current": map[string]any{"text": "VM", "value": "victoriametrics-prometheus"},
+				}},
+				{"kind": "QueryVariable", "spec": qSpec},
+			},
+			"elements": map[string]map[string]any{"requests": goodPanel()},
+			"layout": map[string]any{"kind": "GridLayout", "spec": map[string]any{
+				"items": []map[string]any{item("requests", 0, 0, 12, 8)},
+			}},
+		},
+	}
+	out, err := json.Marshal(resource)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// TestDashboardVariableQuery covers the hole that let both blank-board defects
+// through: promql.Check had exactly one non-test call site, inside checkTarget,
+// so panel queries were gated and variable queries were not — while both bugs
+// that shipped an unusable board lived in variables.
+//
+// The wrapper is a Grafana datasource function, not PromQL, so pointing the
+// gate straight at these expressions rejects the project's own output. What is
+// checkable is the series selector inside it.
+func TestDashboardVariableQuery(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		expr string
+		want bool
+	}{
+		{
+			name: "wrapped selector parses",
+			expr: `label_values(kube_pod_info{namespace=~"$namespace"}, exported_namespace)`,
+		},
+		{
+			name: "plain promql parses",
+			expr: `up{job="kubelet"}`,
+		},
+		{
+			// The defect this rule exists to catch: a malformed selector
+			// yields an empty dropdown, and an empty dropdown means every
+			// panel filtering on the variable matches nothing.
+			expr: `label_values(kube_pod_info{namespace=~"$namespace", exported_namespace)`,
+			name: "wrapped selector is malformed",
+			want: true,
+		},
+		{
+			name: "wrapped selector is empty",
+			expr: `label_values(, exported_namespace)`,
+			want: true,
+		},
+		{
+			name: "no expression at all",
+			expr: "",
+			want: true,
+		},
+		{
+			// Conventions apply inside the wrapper too. A fixed window in a
+			// variable query is as wrong as one in a panel.
+			name: "fixed range window inside the wrapper",
+			expr: `label_values(rate(kube_pod_info[5m]), exported_namespace)`,
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := check.Dashboard("board", varQueryBoard(t, tt.expr))
+
+			var fired bool
+			for _, v := range got {
+				if v.Rule == check.RuleVariableQuery || v.Rule == check.RuleRateInterval {
+					fired = true
+				}
+			}
+			if fired != tt.want {
+				t.Errorf("variable query %q: fired = %v, want %v (violations: %v)", tt.expr, fired, tt.want, got)
+			}
+		})
+	}
+}
+
+// TestPanelEmptyExpressionIsAViolation closes the third way a panel could ship
+// empty in silence. checkTarget returned early on a blank expression, so
+// promql.Check never ran, and RulePanelNoTarget could not fire either because
+// the target existed — it just had nothing in it.
+func TestPanelEmptyExpressionIsAViolation(t *testing.T) {
+	t.Parallel()
+
+	for _, expr := range []string{"", "   "} {
+		panel := map[string]any{"kind": "Panel", "spec": map[string]any{
+			"title": "Request rate",
+			"data": map[string]any{"spec": map[string]any{"queries": []map[string]any{
+				query(expr, "A", "${ds}"),
+			}}},
+		}}
+
+		var fired bool
+		got := check.Dashboard("board", oneBoard(t, panel))
+		for _, v := range got {
+			if v.Rule == check.RulePanelNoTarget {
+				fired = true
+			}
+		}
+		if !fired {
+			t.Errorf("expr %q: RulePanelNoTarget did not fire (violations: %v)", expr, got)
+		}
 	}
 }
