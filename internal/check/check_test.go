@@ -2,6 +2,10 @@ package check_test
 
 import (
 	"encoding/json"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"os"
 	"strings"
 	"testing"
 
@@ -221,7 +225,7 @@ func TestForbiddenLabelIgnoresSubstrings(t *testing.T) {
 func TestDashboardRejectsClassicAndInvalidJSON(t *testing.T) {
 	t.Parallel()
 	for _, body := range [][]byte{[]byte(`{"uid":"classic"}`), []byte(`{"spec":`)} {
-		if got := check.Dashboard("bad", body); !hasRule(got, check.RuleQuerySyntax) {
+		if got := check.Dashboard("bad", body); !hasRule(got, check.RuleResourceKind) {
 			t.Errorf("Dashboard(%s) did not reject invalid resource", body)
 		}
 	}
@@ -572,4 +576,229 @@ func TestPanelEmptyExpressionIsAViolation(t *testing.T) {
 			t.Errorf("expr %q: RulePanelNoTarget did not fire (violations: %v)", expr, got)
 		}
 	}
+}
+
+// TestRateWindowRuleSeesThroughNesting is the regression test for a regex that
+// stopped at the first closing paren: `[^)]*` between the function name and the
+// range window cannot cross a nested call, so rate(label_replace(...)[5m])
+// passed the rule it exists to enforce. This repo's own boards nest
+// label_replace inside aggregations, so the shape is not hypothetical.
+//
+// The rule stays scoped to the rate family on purpose. A fixed window on
+// max_over_time is a deliberate lookback — "was it crashlooping in the last
+// 5m" — where the window is the question being asked, and two panels in
+// generated/ ask exactly that. Widening the rule to every duration literal
+// would reject the project's own correct output.
+func TestRateWindowRuleSeesThroughNesting(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		expr string
+		want bool
+	}{
+		{
+			name: "plain fixed window",
+			expr: `rate(up[5m])`,
+			want: true,
+		},
+		{
+			name: "fixed window behind a nested call",
+			expr: `rate(label_replace(up, "ns", "$1", "namespace", "(.*)")[5m])`,
+			want: true,
+		},
+		{
+			name: "fixed window two calls deep",
+			expr: `sum(increase(label_replace(clamp_min(up, 0), "a", "$1", "b", "(.*)")[1h])) by (job)`,
+			want: true,
+		},
+		{
+			name: "rate interval behind a nested call",
+			expr: `rate(label_replace(up, "ns", "$1", "namespace", "(.*)")[$__rate_interval])`,
+		},
+		{
+			// The two real panels the narrower rule protects.
+			name: "max_over_time keeps its deliberate window",
+			expr: `count(max_over_time(kube_pod_container_status_waiting_reason{reason="CrashLoopBackOff"}[5m]) == 1)`,
+		},
+		{
+			name: "count_over_time keeps its deliberate window",
+			expr: `count_over_time(up[1h])`,
+		},
+		{
+			// A duration inside a label value is not a range window.
+			name: "duration-looking label value",
+			expr: `sum(rate(alerts_total{window="5m"}[$__rate_interval]))`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			panel := goodPanel()
+			setExpr(t, panel, tt.expr)
+			got := check.Dashboard("board", oneBoard(t, panel))
+
+			if fired := hasRule(got, check.RuleRateInterval); fired != tt.want {
+				t.Errorf("RuleRateInterval fired = %v, want %v for %q (violations: %v)", fired, tt.want, tt.expr, got)
+			}
+		})
+	}
+}
+
+// TestForbiddenLabelCoversJoinsAndRewrites extends the cardinality rule to the
+// two positions where a high-cardinality label is most often dragged in without
+// ever appearing in a matcher or a by() clause: a vector-matching clause, and
+// the destination of label_replace/label_join.
+func TestForbiddenLabelCoversJoinsAndRewrites(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		expr string
+		want bool
+	}{
+		{name: "on clause", expr: `up * on(trace_id) group_left() up`, want: true},
+		{name: "ignoring clause", expr: `up * ignoring(user_id) up`, want: true},
+		{name: "group_left labels", expr: `up * on(job) group_left(order_id) up`, want: true},
+		{name: "group_right labels", expr: `up * on(job) group_right(session_id) up`, want: true},
+		{
+			name: "label_replace destination",
+			expr: `label_replace(up, "email", "$1", "instance", "(.*)")`,
+			want: true,
+		},
+		{
+			name: "label_join destination",
+			expr: `label_join(up, "request_id", "-", "job", "instance")`,
+			want: true,
+		},
+		{
+			// The shape this repo actually uses: a benign destination fed by a
+			// benign source must stay quiet, or the rule is unusable here.
+			name: "the repo's own label_replace",
+			expr: `label_replace(sum by (exported_namespace) (kube_pod_info), "namespace", "$1", "exported_namespace", "(.*)")`,
+		},
+		{name: "benign join", expr: `up * on(job) group_left(cluster) up`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			panel := goodPanel()
+			setExpr(t, panel, tt.expr)
+			got := check.Dashboard("board", oneBoard(t, panel))
+
+			if fired := hasRule(got, check.RuleForbiddenLabel); fired != tt.want {
+				t.Errorf("RuleForbiddenLabel fired = %v, want %v for %q (violations: %v)", fired, tt.want, tt.expr, got)
+			}
+		})
+	}
+}
+
+// TestUnknownElementKindIsRejected inverts the element gate. `if kind ==
+// "Panel"` silently skipped anything else, so a LibraryPanel or a future kind
+// would ship with no title, query or datasource check at all — passing the
+// suite by being invisible to it.
+func TestUnknownElementKindIsRejected(t *testing.T) {
+	t.Parallel()
+
+	panel := goodPanel()
+	panel["kind"] = "LibraryPanel"
+
+	got := check.Dashboard("board", oneBoard(t, panel))
+	if !hasRule(got, check.RuleElementKind) {
+		t.Errorf("RuleElementKind did not fire for a LibraryPanel:\n%s", check.Format(got))
+	}
+}
+
+// TestResourceKindHasItsOwnRule separates "this file is not a V2 Dashboard"
+// from "this PromQL does not parse". One rule name for both sent a reader to
+// the wrong file.
+func TestResourceKindHasItsOwnRule(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		model []byte
+	}{
+		{name: "not JSON", model: []byte("{not json")},
+		{name: "classic dashboard", model: []byte(`{"schemaVersion":39,"panels":[]}`)},
+		{name: "wrong kind", model: []byte(`{"apiVersion":"dashboard.grafana.app/v2","kind":"Folder"}`)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := check.Dashboard("board", tt.model)
+			if !hasRule(got, check.RuleResourceKind) {
+				t.Errorf("RuleResourceKind did not fire:\n%s", check.Format(got))
+			}
+			if hasRule(got, check.RuleQuerySyntax) {
+				t.Errorf("RuleQuerySyntax fired for a resource-level problem:\n%s", check.Format(got))
+			}
+		})
+	}
+}
+
+// TestEveryRuleHasATest closes the hole in the suite itself. TestEveryRuleFires
+// calls itself "every rule" while being a hand-typed list, and nothing made
+// that list complete — the same silent-omission shape as a dashboard domain
+// missing from the catalog. Adding a rule and forgetting its negative test left
+// the suite green and the claim in the test's name false.
+//
+// AGENTS.md: "Each enforceable rule has a negative test proving it fires."
+func TestEveryRuleHasATest(t *testing.T) {
+	t.Parallel()
+
+	source, err := os.ReadFile("check_test.go")
+	if err != nil {
+		t.Fatalf("read own source: %v", err)
+	}
+	tests := string(source)
+
+	rules := declaredRules(t)
+	if len(rules) == 0 {
+		t.Fatal("found no rule constants, so this test proved nothing")
+	}
+
+	for _, rule := range rules {
+		// The declaration inside this very test does not count as a use.
+		uses := strings.Count(tests, "check."+rule)
+		if uses == 0 {
+			t.Errorf("check.%s is declared but no test asserts it fires; add a case proving it", rule)
+		}
+	}
+}
+
+// declaredRules returns the names of every Rule* constant in check.go.
+func declaredRules(t *testing.T) []string {
+	t.Helper()
+
+	file, err := parser.ParseFile(token.NewFileSet(), "check.go", nil, 0)
+	if err != nil {
+		t.Fatalf("parse check.go: %v", err)
+	}
+
+	var out []string
+	for _, decl := range file.Decls {
+		gen, ok := decl.(*ast.GenDecl)
+		if !ok || gen.Tok != token.CONST {
+			continue
+		}
+		for _, spec := range gen.Specs {
+			value, ok := spec.(*ast.ValueSpec)
+			if !ok {
+				continue
+			}
+			for _, name := range value.Names {
+				if strings.HasPrefix(name.Name, "Rule") {
+					out = append(out, name.Name)
+				}
+			}
+		}
+	}
+	return out
 }
