@@ -853,8 +853,8 @@
         "spec": {
           "name": "job",
           "current": {
-            "text": "",
-            "value": ""
+            "text": "All",
+            "value": "$__all"
           },
           "label": "Service",
           "hide": "dontHide",
@@ -877,6 +877,7 @@
           "options": [],
           "multi": true,
           "includeAll": true,
+          "allValue": ".*",
           "allowCustomValue": true
         }
       }

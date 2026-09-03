@@ -74,36 +74,39 @@ func buildWorkloads(p profile.Profile) *common.DashboardBuilder {
 // ---------------------------------------------------------------------------
 
 func workloadsNamespaceVariable(p profile.Profile) *dashboardv2.QueryVariableBuilder {
-	// Single-select on purpose: this is a drill-down board, and "all
-	// namespaces at pod granularity" is the unbounded query the overview
-	// exists to avoid.
-	return dashboardv2.NewQueryVariableBuilder("namespace").
+	// Was single-select, because "all namespaces at pod granularity" is the
+	// unbounded query the overview exists to avoid. That intent cost the board
+	// every panel: V2 has no way to say "no selection yet", so a single-select
+	// variable with no Current shipped an empty selection and matched nothing.
+	// Opening on All and letting the reader narrow is the behaviour the classic
+	// board actually had, since Grafana resolved its null current from the
+	// options.
+	return common.SelectAll(dashboardv2.NewQueryVariableBuilder("namespace").
 		Label("Namespace").
 		Query(prometheus.NewQueryV2Builder().Datasource(p.MetricsRef()).Expr("label_values(kube_pod_info, exported_namespace)")).
 		Refresh(dashboardv2.VariableRefreshOnTimeRangeChanged).
-		Sort(dashboardv2.VariableSortAlphabeticalAsc)
+		Multi(true).
+		Sort(dashboardv2.VariableSortAlphabeticalAsc))
 }
 
 func workloadTypeVariable(p profile.Profile) *dashboardv2.QueryVariableBuilder {
-	return dashboardv2.NewQueryVariableBuilder("workload_type").
+	return common.SelectAll(dashboardv2.NewQueryVariableBuilder("workload_type").
 		Label("Type").
 		Query(prometheus.NewQueryV2Builder().Datasource(p.MetricsRef()).Expr(
 			`label_values(` + queries.OwnershipRule + `{namespace=~"$namespace"}, workload_type)`)).
 		Refresh(dashboardv2.VariableRefreshOnTimeRangeChanged).
 		Multi(true).
-		IncludeAll(true).
-		Sort(dashboardv2.VariableSortAlphabeticalAsc)
+		Sort(dashboardv2.VariableSortAlphabeticalAsc))
 }
 
 func workloadVariable(p profile.Profile) *dashboardv2.QueryVariableBuilder {
-	return dashboardv2.NewQueryVariableBuilder("workload").
+	return common.SelectAll(dashboardv2.NewQueryVariableBuilder("workload").
 		Label("Workload").
 		Query(prometheus.NewQueryV2Builder().Datasource(p.MetricsRef()).Expr(
 			`label_values(` + queries.OwnershipRule + `{namespace=~"$namespace",workload_type=~"$workload_type"}, workload)`)).
 		Refresh(dashboardv2.VariableRefreshOnTimeRangeChanged).
 		Multi(true).
-		IncludeAll(true).
-		Sort(dashboardv2.VariableSortAlphabeticalAsc)
+		Sort(dashboardv2.VariableSortAlphabeticalAsc))
 }
 
 // ---------------------------------------------------------------------------

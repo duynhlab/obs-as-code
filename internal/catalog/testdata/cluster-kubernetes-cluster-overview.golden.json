@@ -2213,8 +2213,8 @@
         "spec": {
           "name": "namespace",
           "current": {
-            "text": "",
-            "value": ""
+            "text": "All",
+            "value": "$__all"
           },
           "label": "Namespace",
           "hide": "dontHide",
@@ -2237,6 +2237,7 @@
           "options": [],
           "multi": true,
           "includeAll": true,
+          "allValue": ".*",
           "allowCustomValue": true
         }
       }

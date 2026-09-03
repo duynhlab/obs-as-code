@@ -330,3 +330,102 @@ func TestDashboardDatasourceVarValue(t *testing.T) {
 		})
 	}
 }
+
+// queryVarBoard builds a board carrying one QueryVariable with an arbitrary
+// current, alongside the valid datasource variable every board needs.
+func queryVarBoard(t *testing.T, current any) []byte {
+	t.Helper()
+	qSpec := map[string]any{"name": "namespace", "includeAll": true}
+	if current != nil {
+		qSpec["current"] = current
+	}
+	resource := map[string]any{
+		"apiVersion": "dashboard.grafana.app/v2", "kind": "Dashboard",
+		"spec": map[string]any{
+			"variables": []map[string]any{
+				{"kind": "DatasourceVariable", "spec": map[string]any{
+					"name": "ds", "pluginId": "prometheus",
+					"current": map[string]any{"text": "VM", "value": "victoriametrics-prometheus"},
+				}},
+				{"kind": "QueryVariable", "spec": qSpec},
+			},
+			"elements": map[string]map[string]any{"requests": goodPanel()},
+			"layout": map[string]any{"kind": "GridLayout", "spec": map[string]any{
+				"items": []map[string]any{item("requests", 0, 0, 12, 8)},
+			}},
+		},
+	}
+	out, err := json.Marshal(resource)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// TestDashboardQueryVarValue is the regression test for the defect that shipped
+// three empty boards: V2's QueryVariableSpec.Current has no omitempty, so a
+// variable nobody set serialises as {"text":"","value":""} and Grafana honours
+// it as a real selection of the empty string. Classic dashboards emitted
+// current: null and Grafana resolved it from the options, which is exactly why
+// the pre-V2 boards kept working.
+//
+// Measured on the cluster: namespace=~"" returned 0 data points against 28 for
+// namespace=~".*".
+func TestDashboardQueryVarValue(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		current any
+		wantFir bool
+	}{
+		{
+			name:    "unset current serialises empty",
+			current: map[string]any{"text": "", "value": ""},
+			wantFir: true,
+		},
+		{
+			name:    "all selected",
+			current: map[string]any{"text": "All", "value": "$__all"},
+		},
+		{
+			name:    "one concrete value",
+			current: map[string]any{"text": "monitoring", "value": "monitoring"},
+		},
+		{
+			// Multi-select stores an array, which must not be read as empty.
+			name:    "array of values",
+			current: map[string]any{"text": []string{"a", "b"}, "value": []string{"a", "b"}},
+		},
+		{
+			name:    "empty array selects nothing",
+			current: map[string]any{"text": []string{}, "value": []string{}},
+			wantFir: true,
+		},
+		{
+			// A missing current cannot happen through the SDK, but a
+			// hand-edited artifact could carry one and it is still broken.
+			name:    "no current at all",
+			current: nil,
+			wantFir: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := check.Dashboard("board", queryVarBoard(t, tt.current))
+
+			var fired bool
+			for _, v := range got {
+				if v.Rule == check.RuleQueryVarValue {
+					fired = true
+				}
+			}
+			if fired != tt.wantFir {
+				t.Errorf("RuleQueryVarValue fired = %v, want %v (violations: %v)", fired, tt.wantFir, got)
+			}
+		})
+	}
+}

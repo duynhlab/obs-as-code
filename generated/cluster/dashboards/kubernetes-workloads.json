@@ -1135,8 +1135,8 @@
         "spec": {
           "name": "namespace",
           "current": {
-            "text": "",
-            "value": ""
+            "text": "All",
+            "value": "$__all"
           },
           "label": "Namespace",
           "hide": "dontHide",
@@ -1157,8 +1157,9 @@
           "regexApplyTo": "value",
           "sort": "alphabeticalAsc",
           "options": [],
-          "multi": false,
-          "includeAll": false,
+          "multi": true,
+          "includeAll": true,
+          "allValue": ".*",
           "allowCustomValue": true
         }
       },
@@ -1167,8 +1168,8 @@
         "spec": {
           "name": "workload_type",
           "current": {
-            "text": "",
-            "value": ""
+            "text": "All",
+            "value": "$__all"
           },
           "label": "Type",
           "hide": "dontHide",
@@ -1191,6 +1192,7 @@
           "options": [],
           "multi": true,
           "includeAll": true,
+          "allValue": ".*",
           "allowCustomValue": true
         }
       },
@@ -1199,8 +1201,8 @@
         "spec": {
           "name": "workload",
           "current": {
-            "text": "",
-            "value": ""
+            "text": "All",
+            "value": "$__all"
           },
           "label": "Workload",
           "hide": "dontHide",
@@ -1223,6 +1225,7 @@
           "options": [],
           "multi": true,
           "includeAll": true,
+          "allValue": ".*",
           "allowCustomValue": true
         }
       }

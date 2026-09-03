@@ -53,13 +53,12 @@ func build(p profile.Profile) *common.DashboardBuilder {
 	return common.NewDashboard(p, meta, "example", "golden-signals").
 		// A query variable, so the board is one board for every service rather
 		// than one board per service.
-		QueryVariable(dashboardv2.NewQueryVariableBuilder("job").
+		QueryVariable(common.SelectAll(dashboardv2.NewQueryVariableBuilder("job").
 			Label("Service").
 			Query(prometheus.NewQueryV2Builder().Datasource(p.MetricsRef()).Expr("label_values(up, job)")).
 			Refresh(dashboardv2.VariableRefreshOnTimeRangeChanged).
 			Multi(true).
-			IncludeAll(true).
-			Sort(dashboardv2.VariableSortAlphabeticalAsc)).
+			Sort(dashboardv2.VariableSortAlphabeticalAsc))).
 
 		// Rate, errors, duration — the three questions asked first during an
 		// incident, so they are the three panels seen without scrolling.
