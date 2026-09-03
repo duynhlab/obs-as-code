@@ -16,3 +16,6 @@ coverage.html
 
 # Local editor / OS noise
 .DS_Store
+
+# Personal Vietnamese working notes; they stay on the machine that wrote them.
+*.vi.md
