@@ -75,7 +75,13 @@ func (d Dashboard) Model(p profile.Profile) ([]byte, error) {
 func (d Dashboard) Filename() string { return "dashboards/" + d.UID + ".json" }
 
 // ManifestFilename is the deployable GrafanaManifest path.
-func (d Dashboard) ManifestFilename() string { return "manifests/" + d.UID + ".json" }
+//
+// Dashboards and folders live in sibling directories so Flux can apply them as
+// two waves with the dashboards depending on the folders. The Grafana operator
+// applies each GrafanaManifest independently with no ordering guarantee, and a
+// dashboard naming a folder that does not exist yet fails outright — ordering
+// within one wave guarantees nothing, and two waves need two paths.
+func (d Dashboard) ManifestFilename() string { return "manifests/dashboards/" + d.UID + ".json" }
 
 // Registry is an immutable, deterministically ordered dashboard catalog.
 type Registry struct{ dashboards []Dashboard }

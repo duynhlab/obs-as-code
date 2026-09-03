@@ -24,7 +24,7 @@ func TestRunWritesV2DashboardsAndDeployableManifests(t *testing.T) {
 		t.Errorf("raw kind = %v, want %q", got, want)
 	}
 
-	manifest := readJSON(t, filepath.Join(out, "cluster", "manifests", "kubernetes-cluster-overview.json"))
+	manifest := readJSON(t, filepath.Join(out, "cluster", "manifests", "dashboards", "kubernetes-cluster-overview.json"))
 	if got, want := manifest["apiVersion"], "grafana.integreatly.org/v1beta1"; got != want {
 		t.Errorf("manifest apiVersion = %v, want %q", got, want)
 	}
@@ -32,7 +32,7 @@ func TestRunWritesV2DashboardsAndDeployableManifests(t *testing.T) {
 		t.Errorf("manifest kind = %v, want %q", got, want)
 	}
 
-	if _, err := os.Stat(filepath.Join(out, "cluster", "manifests", "obs-as-code-example.json")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(out, "cluster", "manifests", "dashboards", "obs-as-code-example.json")); !os.IsNotExist(err) {
 		t.Errorf("example deployable manifest exists; example must remain build/test-only: %v", err)
 	}
 }
@@ -351,5 +351,62 @@ func TestGeneratedBoardsSelectAVariableValue(t *testing.T) {
 	// means the kind filter stopped matching and the loop above proved nothing.
 	if checked == 0 {
 		t.Fatal("no QueryVariable was inspected; the kind filter no longer matches the generated shape")
+	}
+}
+
+// TestRunSplitsFoldersFromDashboards pins the artifact layout that lets Flux
+// order the two apply waves.
+//
+// The Grafana operator applies each GrafanaManifest independently with no
+// ordering guarantee, and a dashboard naming a folder that does not exist yet
+// fails with "folders.folder.grafana.app ... not found". Measured on a cold
+// bring-up: the folder succeeded, both dashboards failed, and the wave sat
+// red for six minutes until the operator's next resync — its resyncPeriod of
+// 10m being longer than the wave's 5m timeout.
+//
+// Ordering inside one wave guarantees nothing; only dependsOn between two
+// waves does, and two waves need two paths. That is what this asserts.
+func TestRunSplitsFoldersFromDashboards(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "generated")
+	if err := run([]string{"-out", out}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+
+	manifests := filepath.Join(out, "cluster", "manifests")
+	folders := filepath.Join(manifests, "folders")
+	dashboards := filepath.Join(manifests, "dashboards")
+
+	// Each directory is a kustomize root of its own, so each needs its own
+	// resource list. A single shared Kustomization would collapse the split.
+	for _, dir := range []string{folders, dashboards} {
+		if _, err := os.Stat(filepath.Join(dir, "Kustomization")); err != nil {
+			t.Errorf("%s has no Kustomization, so Flux cannot apply it as a wave: %v", dir, err)
+		}
+	}
+
+	folder := readJSON(t, filepath.Join(folders, "platform-infrastructure.json"))
+	if got := folder["kind"]; got != "GrafanaManifest" {
+		t.Errorf("folder manifest kind = %v, want GrafanaManifest", got)
+	}
+	if _, err := os.Stat(filepath.Join(dashboards, "platform-infrastructure.json")); !os.IsNotExist(err) {
+		t.Errorf("the folder is also in the dashboards directory, which puts it back in the same wave: %v", err)
+	}
+
+	for _, name := range []string{"kubernetes-cluster-overview.json", "kubernetes-workloads.json"} {
+		if _, err := os.Stat(filepath.Join(dashboards, name)); err != nil {
+			t.Errorf("%s is not in the dashboards directory: %v", name, err)
+		}
+	}
+
+	// Nothing may remain directly under manifests/: a leftover there would be
+	// applied by neither wave, or by both.
+	entries, err := os.ReadDir(manifests)
+	if err != nil {
+		t.Fatalf("read %s: %v", manifests, err)
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			t.Errorf("%s is directly under manifests/ and belongs to no wave", e.Name())
+		}
 	}
 }

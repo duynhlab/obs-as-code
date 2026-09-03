@@ -2,25 +2,62 @@
 
 The release workflow publishes `generated/` to
 `oci://ghcr.io/duynhlab/obs-as-code:<tag>`. Homelab declares one
-`OCIRepository` for that package and one Flux `Kustomization` with:
+`OCIRepository` for that package and **two** Flux `Kustomization`s — folders
+first, dashboards depending on them:
 
 ```yaml
+# obs-as-code-folders
 spec:
   sourceRef:
     kind: OCIRepository
     name: obs-as-code-oci
-  path: ./cluster/manifests
+  path: ./cluster/manifests/folders
   targetNamespace: monitoring
   prune: true
+---
+# obs-as-code-dashboards
+spec:
+  sourceRef:
+    kind: OCIRepository
+    name: obs-as-code-oci
+  path: ./cluster/manifests/dashboards
+  targetNamespace: monitoring
+  prune: true
+  dependsOn:
+    - name: obs-as-code-folders   # see below; not optional
 ```
 
-The artifact path contains an extensionless, JSON-formatted `Kustomization`.
-It applies one folder and the production dashboards as
-`grafana.integreatly.org/v1beta1/GrafanaManifest` resources. Their inline
+Each path contains an extensionless, JSON-formatted `Kustomization`, and
+nothing sits directly under `manifests/` — a file there would belong to
+neither wave. Both apply
+`grafana.integreatly.org/v1beta1/GrafanaManifest` resources whose inline
 templates use `dashboard.grafana.app/v2` and `folder.grafana.app/v1`.
-The homelab Kustomization defines CEL health expressions for
+The homelab Kustomizations define CEL health expressions for
 `ManifestSynchronized`; GrafanaManifest does not expose the conventional
 `Ready` condition that Flux's generic kstatus check expects.
+
+## Why the split is two waves and not one directory
+
+The Grafana Operator applies each `GrafanaManifest` independently, in no
+guaranteed order. A dashboard whose `grafana.app/folder` annotation names a
+folder that has not been created yet fails outright:
+
+```
+applying resource: creating resource:
+folders.folder.grafana.app "platform-infrastructure" not found
+```
+
+Measured on a cold bring-up while both lived in one directory: the folder
+applied, both dashboards failed, and the wave reported `HealthCheckFailed`
+for six minutes before the operator's next resync repaired it. The wave
+could not simply wait it out either — the operator's `resyncPeriod` is 10m
+while the wave's `timeout` is 5m, so the retry always arrives after the
+deadline.
+
+Ordering *within* one Kustomization guarantees nothing. Only `dependsOn`
+between two of them does, and two Kustomizations need two paths — which is
+why the artifact ships the split rather than leaving homelab to slice one
+directory.
 
 ## Why this replaced `GrafanaDashboard.spec.oci`
 

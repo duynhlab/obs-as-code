@@ -108,7 +108,10 @@ validate: ## Validate JSON identity and build the deployable Kustomization
 
 .PHONY: dry-run
 dry-run: generate ## Server-side dry-run against the current Kubernetes context
-	kubectl apply --dry-run=server -k "$(OUT)/cluster/manifests"
+	# Folders before dashboards, same order Flux applies the two waves in: a
+	# dashboard is rejected if its folder does not exist yet.
+	kubectl apply --dry-run=server -k "$(OUT)/cluster/manifests/folders"
+	kubectl apply --dry-run=server -k "$(OUT)/cluster/manifests/dashboards"
 
 ##@ Preview
 

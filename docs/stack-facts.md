@@ -63,7 +63,8 @@ Flux consumes **only** OCIRepositories. Existing sources:
 There is no `GitRepository` in the cluster.
 
 The selected cutover adds `obs-as-code-oci`; Flux applies
-`./cluster/manifests`. Those files are outer GrafanaManifest v1beta1 resources
+`./cluster/manifests/folders` and then `./cluster/manifests/dashboards` as two
+waves. Those files are outer GrafanaManifest v1beta1 resources
 with inline Dashboard V2 templates. The old per-board GrafanaDashboard OCI
 resources are removed. Release `v0.4.0` must exist before enabling the Flux
 source.

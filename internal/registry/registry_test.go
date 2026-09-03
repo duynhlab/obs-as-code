@@ -95,7 +95,7 @@ func TestDashboardProducesV2ResourceAndCanonicalPaths(t *testing.T) {
 	if dashboard.Filename() != "dashboards/good-board.json" {
 		t.Errorf("Filename = %q", dashboard.Filename())
 	}
-	if dashboard.ManifestFilename() != "manifests/good-board.json" {
+	if dashboard.ManifestFilename() != "manifests/dashboards/good-board.json" {
 		t.Errorf("ManifestFilename = %q", dashboard.ManifestFilename())
 	}
 }

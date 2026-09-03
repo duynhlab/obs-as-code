@@ -117,41 +117,62 @@ func renderProfile(p profile.Profile, outDir string, written map[string]bool, st
 		}
 	}
 
+	// Folders and dashboards go to sibling directories, each its own kustomize
+	// root, so Flux can apply them as two waves with the dashboards depending
+	// on the folders.
+	//
+	// One wave is not enough. The Grafana operator applies each
+	// GrafanaManifest independently and in no guaranteed order, so a dashboard
+	// naming a folder that does not exist yet fails with
+	// "folders.folder.grafana.app ... not found". Measured on a cold bring-up:
+	// the folder applied, both dashboards failed, and the wave stayed red for
+	// six minutes until the operator's next resync — its resyncPeriod of 10m
+	// being longer than the wave's 5m timeout, so the wave could not wait it
+	// out. Ordering inside one wave guarantees nothing; only dependsOn between
+	// two waves does, and two waves need two paths.
 	target := delivery.ClusterTarget()
-	manifestResources := make([]string, 0, len(catalog.Deployable())+1)
-	if len(catalog.Deployable()) > 0 {
-		const folderFile = "platform-infrastructure.json"
-		folder, err := delivery.Folder("platform-infrastructure", "Platform / Infrastructure", target)
-		if err != nil {
-			return nil, err
-		}
-		if err := writeFile(filepath.Join(outDir, p.Name, "manifests", folderFile), folder, written, stdout); err != nil {
-			return nil, err
-		}
-		manifestResources = append(manifestResources, folderFile)
+	if len(catalog.Deployable()) == 0 {
+		return violations, nil
 	}
+
+	const folderFile = "platform-infrastructure.json"
+	folder, err := delivery.Folder("platform-infrastructure", "Platform / Infrastructure", target)
+	if err != nil {
+		return nil, err
+	}
+	folderDir := filepath.Join(outDir, p.Name, "manifests", "folders")
+	if err := writeFile(filepath.Join(folderDir, folderFile), folder, written, stdout); err != nil {
+		return nil, err
+	}
+	if err := writeKustomization(folderDir, []string{folderFile}, written, stdout); err != nil {
+		return nil, err
+	}
+
+	dashboardResources := make([]string, 0, len(catalog.Deployable()))
 	for _, d := range catalog.Deployable() {
 		manifest, err := delivery.Dashboard(d, p, target)
 		if err != nil {
 			return nil, err
 		}
-		name := filepath.Base(d.ManifestFilename())
 		if err := writeFile(filepath.Join(outDir, p.Name, d.ManifestFilename()), manifest, written, stdout); err != nil {
 			return nil, err
 		}
-		manifestResources = append(manifestResources, name)
+		dashboardResources = append(dashboardResources, filepath.Base(d.ManifestFilename()))
 	}
-	if len(manifestResources) > 0 {
-		body, err := delivery.Kustomization(manifestResources)
-		if err != nil {
-			return nil, err
-		}
-		if err := writeFile(filepath.Join(outDir, p.Name, "manifests", "Kustomization"), body, written, stdout); err != nil {
-			return nil, err
-		}
+	dashboardDir := filepath.Join(outDir, p.Name, "manifests", "dashboards")
+	if err := writeKustomization(dashboardDir, dashboardResources, written, stdout); err != nil {
+		return nil, err
 	}
 
 	return violations, nil
+}
+
+func writeKustomization(dir string, resources []string, written map[string]bool, stdout io.Writer) error {
+	body, err := delivery.Kustomization(resources)
+	if err != nil {
+		return err
+	}
+	return writeFile(filepath.Join(dir, "Kustomization"), body, written, stdout)
 }
 
 func writeFile(path string, body []byte, written map[string]bool, stdout io.Writer) error {

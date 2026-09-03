@@ -31,7 +31,7 @@ internal/delivery            GrafanaManifest and folder wrappers
 internal/check               rendered-JSON conformance rules
 internal/catalog             aggregates every dashboard package once
 generated/cluster/dashboards raw dashboard.grafana.app/v2 resources
-generated/cluster/manifests  Flux-applied GrafanaManifest JSON
+generated/cluster/manifests/{folders,dashboards}  Flux-applied GrafanaManifest JSON, one wave each
 ```
 
 ## Rules
@@ -74,7 +74,10 @@ rule to land a dashboard.
 - Inner dashboard: `dashboard.grafana.app/v2`, kind `Dashboard`.
 - Inner folder: `folder.grafana.app/v1`, kind `Folder`.
 - Namespace: `monitoring`; instance selector: `dashboards=grafana`.
-- Flux path: `./cluster/manifests` in the OCI artifact.
+- Flux paths: `./cluster/manifests/folders` then `./cluster/manifests/dashboards`
+  in the OCI artifact — two waves, the second `dependsOn` the first because the
+  operator applies manifests in no guaranteed order and a dashboard whose folder
+  is missing fails outright. See `docs/flux/README.md`.
 - Operator: 5.25.0 or newer. 5.24.0 cannot reliably update V2 resources because
   it omits the required `resourceVersion`.
 
