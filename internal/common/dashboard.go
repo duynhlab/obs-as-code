@@ -153,10 +153,16 @@ func (b *DashboardBuilder) Build() (dashboardv2.Dashboard, error) {
 // query here matches with =~, ".*" is verified against the live backend, and
 // an explicit value keeps the board independent of how a given Grafana version
 // chooses to expand All.
+// AllowCustomValue is turned off here rather than left at the SDK's default of
+// true. A query variable lists what exists; letting a reader type a namespace
+// or workload that does not renders an empty panel with nothing saying why,
+// which is the same silent emptiness the Current setting below exists to
+// prevent — reached by hand instead of by default.
 func SelectAll(b *dashboardv2.QueryVariableBuilder) *dashboardv2.QueryVariableBuilder {
 	return b.
 		IncludeAll(true).
 		AllValue(".*").
+		AllowCustomValue(false).
 		Current(dashboardv2.VariableOption{
 			Text:  dashboardv2.StringOrArrayOfString{String: strPtr("All")},
 			Value: dashboardv2.StringOrArrayOfString{String: strPtr("$__all")},

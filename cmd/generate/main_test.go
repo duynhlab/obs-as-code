@@ -334,6 +334,15 @@ func TestGeneratedBoardsSelectAVariableValue(t *testing.T) {
 				if text, _ := current["text"].(string); text == "" {
 					t.Errorf("query variable %q ships an empty current.text, so the picker renders blank", name)
 				}
+
+				// The SDK defaults allowCustomValue to true and nobody set it.
+				// On a namespace or workload picker that lets a reader type a
+				// value that does not exist, and the panels then render empty
+				// with nothing saying why — the same silent-emptiness this test
+				// exists to prevent, arrived at by hand instead of by default.
+				if allow, ok := vSpec["allowCustomValue"].(bool); !ok || allow {
+					t.Errorf("query variable %q has allowCustomValue = %v, want false; a typed-in value that does not exist renders an empty panel with no error", name, vSpec["allowCustomValue"])
+				}
 			}
 		})
 	}
