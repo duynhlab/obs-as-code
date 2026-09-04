@@ -3,7 +3,6 @@ package kubernetes
 import (
 	sdkcommon "github.com/grafana/grafana-foundation-sdk/go/common"
 	"github.com/grafana/grafana-foundation-sdk/go/dashboardv2"
-	"github.com/grafana/grafana-foundation-sdk/go/prometheus"
 	"github.com/grafana/grafana-foundation-sdk/go/units"
 
 	"github.com/duynhlab/obs-as-code/internal/common"
@@ -83,7 +82,7 @@ func workloadsNamespaceVariable(p profile.Profile) *dashboardv2.QueryVariableBui
 	// options.
 	return common.SelectAll(dashboardv2.NewQueryVariableBuilder("namespace").
 		Label("Namespace").
-		Query(prometheus.NewQueryV2Builder().Datasource(p.MetricsRef()).Expr(queries.NamespaceValues())).
+		Query(common.VariableQuery(p, queries.NamespaceValues())).
 		Refresh(dashboardv2.VariableRefreshOnTimeRangeChanged).
 		Multi(true).
 		Sort(dashboardv2.VariableSortAlphabeticalAsc))
@@ -92,7 +91,7 @@ func workloadsNamespaceVariable(p profile.Profile) *dashboardv2.QueryVariableBui
 func workloadTypeVariable(p profile.Profile) *dashboardv2.QueryVariableBuilder {
 	return common.SelectAll(dashboardv2.NewQueryVariableBuilder("workload_type").
 		Label("Type").
-		Query(prometheus.NewQueryV2Builder().Datasource(p.MetricsRef()).Expr(queries.WorkloadTypeValues("$namespace"))).
+		Query(common.VariableQuery(p, queries.WorkloadTypeValues("$namespace"))).
 		Refresh(dashboardv2.VariableRefreshOnTimeRangeChanged).
 		Multi(true).
 		Sort(dashboardv2.VariableSortAlphabeticalAsc))
@@ -101,7 +100,7 @@ func workloadTypeVariable(p profile.Profile) *dashboardv2.QueryVariableBuilder {
 func workloadVariable(p profile.Profile) *dashboardv2.QueryVariableBuilder {
 	return common.SelectAll(dashboardv2.NewQueryVariableBuilder("workload").
 		Label("Workload").
-		Query(prometheus.NewQueryV2Builder().Datasource(p.MetricsRef()).Expr(queries.WorkloadValues("$namespace", "$workload_type"))).
+		Query(common.VariableQuery(p, queries.WorkloadValues("$namespace", "$workload_type"))).
 		Refresh(dashboardv2.VariableRefreshOnTimeRangeChanged).
 		Multi(true).
 		Sort(dashboardv2.VariableSortAlphabeticalAsc))

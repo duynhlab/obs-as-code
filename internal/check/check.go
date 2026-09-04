@@ -105,7 +105,12 @@ type dataQuery struct {
 		Name string `json:"name"`
 	} `json:"datasource"`
 	Spec struct {
+		// Expr is PromQL, and it is the panel field. A variable that carries
+		// one is the defect RuleVariableQuery rejects.
 		Expr string `json:"expr"`
+		// Query and QryType are the datasource's own variable-query fields.
+		Query   string `json:"query"`
+		QryType *int   `json:"qryType"`
 	} `json:"spec"`
 }
 
@@ -325,10 +330,30 @@ var labelValuesCall = regexp.MustCompile(`^label_values\((.*),\s*([a-zA-Z_][a-zA
 // place.
 func checkVariableQuery(uid string, v variable) []Violation {
 	subject := fmt.Sprintf("variable %q", v.Spec.Name)
-	expr := strings.TrimSpace(v.Spec.Query.Spec.Expr)
+	spec := v.Spec.Query.Spec
+
+	// A datasource variable query is not PromQL. With the expression in expr,
+	// Grafana hands it to the datasource as PromQL and the datasource answers
+	// `422: unsupported function "label_values"`, so the option list stays
+	// empty and the picker offers nothing to choose — while the board still
+	// renders, because panels use real PromQL and All substitutes allValue
+	// without needing options. Nothing else caught it: a reader looking at the
+	// dropdown did.
+	if strings.TrimSpace(spec.Expr) != "" {
+		return []Violation{{Resource: uid, Rule: RuleVariableQuery,
+			Detail: fmt.Sprintf("%s puts %q in expr, but a variable query is not PromQL; the datasource rejects label_values() as a function. Build it with common.VariableQuery so it lands in query with qryType", subject, spec.Expr)}}
+	}
+
+	expr := strings.TrimSpace(spec.Query)
 	if expr == "" {
 		return []Violation{{Resource: uid, Rule: RuleVariableQuery,
 			Detail: fmt.Sprintf("%s has no query expression, so its dropdown is empty and every panel filtering on it matches nothing", subject)}}
+	}
+	// Without qryType the datasource cannot tell which kind of variable query
+	// this is, and falls back to a shape that returns nothing.
+	if spec.QryType == nil {
+		return []Violation{{Resource: uid, Rule: RuleVariableQuery,
+			Detail: fmt.Sprintf("%s has a query but no qryType, so the datasource cannot tell which variable query it is", subject)}}
 	}
 
 	inner := expr

@@ -12,7 +12,6 @@ package example
 import (
 	"github.com/grafana/grafana-foundation-sdk/go/cog"
 	"github.com/grafana/grafana-foundation-sdk/go/dashboardv2"
-	"github.com/grafana/grafana-foundation-sdk/go/prometheus"
 	"github.com/grafana/grafana-foundation-sdk/go/units"
 
 	"github.com/duynhlab/obs-as-code/internal/common"
@@ -55,7 +54,7 @@ func build(p profile.Profile) *common.DashboardBuilder {
 		// than one board per service.
 		QueryVariable(common.SelectAll(dashboardv2.NewQueryVariableBuilder("job").
 			Label("Service").
-			Query(prometheus.NewQueryV2Builder().Datasource(p.MetricsRef()).Expr(queries.JobValues())).
+			Query(common.VariableQuery(p, queries.JobValues())).
 			Refresh(dashboardv2.VariableRefreshOnTimeRangeChanged).
 			Multi(true).
 			Sort(dashboardv2.VariableSortAlphabeticalAsc))).

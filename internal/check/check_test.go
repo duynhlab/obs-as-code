@@ -445,7 +445,7 @@ func TestDashboardQueryVarValue(t *testing.T) {
 
 // varQueryBoard builds a board whose one QueryVariable carries expr, with a
 // valid current so RuleQueryVarValue stays quiet and only the query is on trial.
-func varQueryBoard(t *testing.T, expr string) []byte {
+func varQueryBoard(t *testing.T, querySpec map[string]any) []byte {
 	t.Helper()
 	qSpec := map[string]any{
 		"name":       "namespace",
@@ -454,7 +454,7 @@ func varQueryBoard(t *testing.T, expr string) []byte {
 		"query": map[string]any{
 			"kind": "DataQuery", "group": "prometheus",
 			"datasource": map[string]any{"name": "${ds}"},
-			"spec":       map[string]any{"expr": expr},
+			"spec":       querySpec,
 		},
 	}
 	resource := map[string]any{
@@ -535,7 +535,7 @@ func TestDashboardVariableQuery(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := check.Dashboard("board", varQueryBoard(t, tt.expr))
+			got := check.Dashboard("board", varQueryBoard(t, map[string]any{"qryType": 1, "query": tt.expr}))
 
 			var fired bool
 			for _, v := range got {
@@ -801,4 +801,71 @@ func declaredRules(t *testing.T) []string {
 		}
 	}
 	return out
+}
+
+// TestVariableQueryRejectsPromQLShape is the regression test for the defect a
+// reader found by looking at the board: the Namespace picker was stuck on All
+// with no individual namespaces to choose.
+//
+// A Prometheus variable query is not PromQL and does not belong in `expr`.
+// Measured on the cluster with the expression in `expr`, the datasource
+// answered `422: unsupported function "label_values"`, so the option list
+// stayed empty. Nothing else showed it: panels use real PromQL and rendered
+// fine, and `All` works because it substitutes allValue ".*" without needing
+// options. Every gate, every test and every Flux/operator condition was green.
+func TestVariableQueryRejectsPromQLShape(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		spec  map[string]any
+		want  bool
+		match string
+	}{
+		{
+			name: "correct label values shape",
+			spec: map[string]any{"qryType": 1, "query": "label_values(kube_pod_info, exported_namespace)"},
+		},
+		{
+			// The defect, exactly as it shipped.
+			name:  "expression in expr",
+			spec:  map[string]any{"expr": "label_values(kube_pod_info, exported_namespace)"},
+			want:  true,
+			match: "not PromQL",
+		},
+		{
+			// Both set is worse, not better: Grafana would still send expr.
+			name:  "expr alongside query",
+			spec:  map[string]any{"qryType": 1, "query": "label_values(up, job)", "expr": "up"},
+			want:  true,
+			match: "not PromQL",
+		},
+		{
+			name:  "query without qryType",
+			spec:  map[string]any{"query": "label_values(up, job)"},
+			want:  true,
+			match: "qryType",
+		},
+		{
+			name:  "no query at all",
+			spec:  map[string]any{"qryType": 1},
+			want:  true,
+			match: "no query expression",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := check.Dashboard("board", varQueryBoard(t, tt.spec))
+			fired := hasRule(got, check.RuleVariableQuery)
+			if fired != tt.want {
+				t.Fatalf("RuleVariableQuery fired = %v, want %v (violations: %v)", fired, tt.want, got)
+			}
+			if tt.match != "" && !strings.Contains(check.Format(got), tt.match) {
+				t.Errorf("violation should mention %q, got:\n%s", tt.match, check.Format(got))
+			}
+		})
+	}
 }
