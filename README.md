@@ -1,5 +1,11 @@
 # obs-as-code
 
+> **Superseded by [`duynhlab/grafana-dashboards`](https://github.com/duynhlab/grafana-dashboards).**
+> The homelab cluster stopped consuming this repository's OCI artifact on
+> 2026-09-25 (homelab #1085); grafana-dashboards generates the boards it runs
+> now. No new releases will be cut here, and the repository is archived. The
+> rest of this README describes the code as it was.
+
 Grafana dashboards as Go code, built with the
 [Grafana Foundation SDK](https://github.com/grafana/grafana-foundation-sdk).
 The repository emits Grafana Dashboard V2 resources and deployable
